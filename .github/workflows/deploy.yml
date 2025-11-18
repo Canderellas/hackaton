@@ -1,0 +1,31 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /app
+          echo "Stopping old containers..."
+          docker-compose down
+          echo "Pulling latest images..."
+          docker-compose pull
+          echo "Starting new containers..."
+          docker-compose up -d
+          echo "Cleaning up..."
+          docker system prune -f
+          echo "🚀 Deploy completed!"
