@@ -1,0 +1,36 @@
+# Файлы IDE
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+
+# Файлы сборки
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+publish/
+
+# Файлы проектов
+*.csproj.user
+*.props
+
+# Логи
+*.log
+logs/
+
+# NuGet
+[Nu]Get/
+*.nuget.props
+*.nuget.targets
+packages/
+
+# Резервные копии
+*.backup
