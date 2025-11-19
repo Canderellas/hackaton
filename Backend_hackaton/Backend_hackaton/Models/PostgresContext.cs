@@ -19,6 +19,8 @@ public partial class PostgresContext : DbContext
 
     public virtual DbSet<DevicePropertyValue> DevicePropertyValues { get; set; }
 
+    public virtual DbSet<DeviceStyleValue> DeviceStyleValues { get; set; }
+
     public virtual DbSet<Model> Models { get; set; }
 
     public virtual DbSet<ModelProperty> ModelProperties { get; set; }
@@ -27,11 +29,13 @@ public partial class PostgresContext : DbContext
 
     public virtual DbSet<Property> Properties { get; set; }
 
+    public virtual DbSet<StyleProperty> StyleProperties { get; set; }
+
     public virtual DbSet<TypeDevice> TypeDevices { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseNpgsql("Host=postgres_db;Port=5432;Database=Hackaton;Username=postgres;Password=12345678;");
+        => optionsBuilder.UseNpgsql("Host=postgres_db;Port=5432;Database=Hackaton;Username=postgres;Password=12345678");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -74,6 +78,30 @@ public partial class PostgresContext : DbContext
                 .HasForeignKey(d => d.FkModelProperty)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Model_property");
+        });
+
+        modelBuilder.Entity<DeviceStyleValue>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("Device_style_value_pkey");
+
+            entity.ToTable("Device_style_value");
+
+            entity.Property(e => e.Id)
+                .UseIdentityAlwaysColumn()
+                .HasColumnName("ID");
+            entity.Property(e => e.FkDevicePropertyValue).HasColumnName("FK_Device_property_value");
+            entity.Property(e => e.FkStyleProperty).HasColumnName("FK_Style_property");
+            entity.Property(e => e.Value).HasMaxLength(50);
+
+            entity.HasOne(d => d.FkDevicePropertyValueNavigation).WithMany(p => p.DeviceStyleValues)
+                .HasForeignKey(d => d.FkDevicePropertyValue)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Device_property_value");
+
+            entity.HasOne(d => d.FkStylePropertyNavigation).WithMany(p => p.DeviceStyleValues)
+                .HasForeignKey(d => d.FkStyleProperty)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Style_property");
         });
 
         modelBuilder.Entity<Model>(entity =>
@@ -145,6 +173,18 @@ public partial class PostgresContext : DbContext
             entity.HasKey(e => e.Id).HasName("Property_pkey");
 
             entity.ToTable("Property");
+
+            entity.Property(e => e.Id)
+                .UseIdentityAlwaysColumn()
+                .HasColumnName("ID");
+            entity.Property(e => e.Name).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<StyleProperty>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("Style_property_pkey");
+
+            entity.ToTable("Style_property");
 
             entity.Property(e => e.Id)
                 .UseIdentityAlwaysColumn()
