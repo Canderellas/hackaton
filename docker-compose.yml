@@ -44,7 +44,7 @@ services:
   # Vue.js Frontend
   frontend:
     build:
-      context: ./frontend
+      context: ./Frontend
       dockerfile: Dockerfile
     environment:
       - VITE_API_URL=https://comunada.store/api
