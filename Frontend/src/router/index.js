@@ -3,7 +3,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import QrCameraScannerFixed from '@/views/QrCameraScannerFixed.vue'  // ← твой сканер
 import DeviceInfo from '@/views/DeviceInfo.vue'
 
-
 const routes = [
   {
     path: '/',
