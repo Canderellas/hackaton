@@ -2,6 +2,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import jsQR from 'jsqr'
+import ArDeviceInfo from './ArDeviceInfo.vue'
 
 // Refs
 const video = ref(null)
@@ -9,6 +10,7 @@ const canvas = ref(null)
 const stream = ref(null)
 const errorMessage = ref('')
 const showARView = ref(false)
+const showResultModal = ref(false) // ← ДОБАВИЛИ отдельное состояние для модалки
 const deviceData = ref(null)
 const lastScannedData = ref('')
 
@@ -92,7 +94,7 @@ const scanNow = async () => {
     
     if (data) {
       deviceData.value = data
-      showARView.value = true
+      showResultModal.value = true // ← ПОКАЗЫВАЕМ МОДАЛКУ, а не AR
     }
   } else {
     errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
@@ -111,8 +113,18 @@ const drawGreenBorder = (ctx, location) => {
   ctx.stroke()
 }
 
+const openAR = () => {
+  showResultModal.value = false // ← Закрываем модалку
+  showARView.value = true       // ← Открываем AR
+}
+
 const closeAR = () => {
   showARView.value = false
+  deviceData.value = null
+}
+
+const closeModal = () => {
+  showResultModal.value = false
   deviceData.value = null
 }
 
@@ -145,22 +157,43 @@ onUnmounted(() => {
       📷 Сканировать QR-код
     </button>
 
-    <!-- Временно уберем AR для теста -->
-    <div v-if="showARView && deviceData" class="modal-overlay" @click.self="closeAR">
+    <!-- Модалка с результатом -->
+    <div v-if="showResultModal && deviceData" class="modal-overlay" @click.self="closeModal">
       <div class="modal-content">
         <div class="modal-header">
           <h2>Информация об устройстве</h2>
-          <button class="close-button" @click="closeAR">×</button>
+          <button class="close-button" @click="closeModal">×</button>
         </div>
         <div class="device-info">
           <h3>{{ deviceData.name_model }}</h3>
-          <p>{{ deviceData.name_type }}</p>
-          <button @click="showARView = false" class="ar-button">
-            🚀 Открыть в AR
-          </button>
+          <p class="device-type">{{ deviceData.name_type }}</p>
+          
+          <div v-if="deviceData.properties && deviceData.properties.length > 0" class="properties">
+            <h4>Характеристики:</h4>
+            <div v-for="(prop, idx) in deviceData.properties.slice(0, 3)" :key="idx" class="property">
+              <strong>{{ prop.Name }}:</strong> {{ prop.Value }}
+            </div>
+          </div>
+
+          <div class="action-buttons">
+            <button @click="openAR" class="ar-button">
+              🚀 Открыть в AR
+            </button>
+            <button @click="closeModal" class="close-modal-button">
+              Закрыть
+            </button>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- AR режим -->
+    <ArDeviceInfo
+      v-if="showARView"
+      :scanned-data="lastScannedData"
+      :device-data="deviceData"
+      @close="closeAR"
+    />
   </div>
 </template>
 
@@ -261,7 +294,6 @@ onUnmounted(() => {
   padding: 24px;
   max-width: 400px;
   width: 100%;
-  text-align: center;
 }
 
 .modal-header {
@@ -269,11 +301,14 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f0f0f0;
 }
 
 .modal-header h2 {
   margin: 0;
   font-size: 20px;
+  color: #1d1d1f;
 }
 
 .close-button {
@@ -281,16 +316,86 @@ onUnmounted(() => {
   border: none;
   font-size: 24px;
   cursor: pointer;
+  color: #8e8e93;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.close-button:hover {
+  background: #f0f0f0;
+}
+
+.device-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  color: #1d1d1f;
+}
+
+.device-type {
+  margin: 0 0 20px 0;
+  color: #8e8e93;
+  font-size: 16px;
+}
+
+.properties {
+  margin-bottom: 24px;
+}
+
+.properties h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #1d1d1f;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 8px;
+}
+
+.property {
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.property strong {
+  color: #1d1d1f;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  flex-direction: column;
 }
 
 .ar-button {
   background: #007aff;
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 10px;
+  padding: 14px 20px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 16px;
-  margin-top: 16px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.ar-button:hover {
+  background: #0056cc;
+  transform: translateY(-1px);
+}
+
+.close-modal-button {
+  background: #8e8e93;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.close-modal-button:hover {
+  background: #6d6d70;
 }
 </style>
