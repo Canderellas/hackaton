@@ -1,7 +1,7 @@
+<!-- src/components/QrCameraScanner.vue -->
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import jsQR from 'jsqr'
-import ArDeviceInfo from './ArDeviceInfo.vue'
 
 // Refs
 const video = ref(null)
@@ -145,15 +145,25 @@ onUnmounted(() => {
       📷 Сканировать QR-код
     </button>
 
-    <!-- AR режим -->
-    <ArDeviceInfo
-      v-if="showARView"
-      :scanned-data="lastScannedData"
-      :device-data="deviceData"
-      @close="closeAR"
-    />
+    <!-- Временно уберем AR для теста -->
+    <div v-if="showARView && deviceData" class="modal-overlay" @click.self="closeAR">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Информация об устройстве</h2>
+          <button class="close-button" @click="closeAR">×</button>
+        </div>
+        <div class="device-info">
+          <h3>{{ deviceData.name_model }}</h3>
+          <p>{{ deviceData.name_type }}</p>
+          <button @click="showARView = false" class="ar-button">
+            🚀 Открыть в AR
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
+
 <style scoped>
 .app {
   position: fixed;
@@ -228,5 +238,59 @@ onUnmounted(() => {
 .scan-button:active {
   transform: scale(0.95);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Модалка */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 20px;
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.ar-button {
+  background: #007aff;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-top: 16px;
 }
 </style>
