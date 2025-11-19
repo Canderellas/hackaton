@@ -1,7 +1,7 @@
 <!-- src/components/ArDeviceInfo.vue -->
 <template>
     <div class="ar-container">
-      <!-- ✅ ДОБАВЛЕНО: Видео элемент для камеры -->
+      <!-- Видео элемент для камеры -->
       <video 
         id="ar-video" 
         autoplay 
@@ -13,21 +13,16 @@
       <!-- A-Frame сцена -->
       <div id="ar-scene"></div>
       
-      <!-- Интерфейс поверх AR -->
+      <!-- Интерфейс -->
       <div class="ar-ui">
-        <div v-if="!markerVisible" class="scanning-message">
-          <h3>🔍 Наведите камеру на QR-код устройства</h3>
-          <p>Информация появится прямо над QR-кодом в пространстве</p>
+        <div class="test-message">
+          <h3>🧪 ТЕСТОВЫЙ РЕЖИМ</h3>
+          <p>3D модель должна быть видна в пространстве</p>
           <div class="debug-info">
             <p>GUID: {{ currentGuid }}</p>
-            <p>Barcode value: {{ barcodeValue }}</p>
+            <p>Barcode: {{ barcodeValue }}</p>
             <p>Статус: {{ arStatus }}</p>
           </div>
-        </div>
-        
-        <div v-else class="found-message">
-          <h3>✅ Устройство распознано!</h3>
-          <p>Информация закреплена в реальном пространстве</p>
         </div>
   
         <button @click="closeAR" class="close-button">
@@ -47,12 +42,11 @@
   
   const emit = defineEmits(['close'])
   
-  const markerVisible = ref(false)
-  const arStatus = ref('Инициализация AR...')
+  const arStatus = ref('Запуск теста...')
   const currentGuid = ref('')
   const videoStream = ref(null)
   
-  // Конвертируем GUID в barcode value
+  // Вычисляем barcode (оставляем для отладки)
   const barcodeValue = computed(() => {
     const guid = props.scannedData
     if (!guid) return 100
@@ -68,17 +62,13 @@
         hash |= 0
       }
       
-      const value = Math.abs(hash) % 1024
-      arStatus.value = `AR ГОТОВ. Ищем QR-КОД C barcode: ${value}`
-      return value
-      
-    } catch (error) {
-      arStatus.value = 'Ошибка конвертации GUID'
+      return Math.abs(hash) % 1024
+    } catch {
       return 100
     }
   })
   
-  // ✅ Запускаем камеру
+  // Запускаем камеру
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -98,109 +88,101 @@
       return stream
     } catch (error) {
       console.error('Ошибка камеры:', error)
-      arStatus.value = 'Нет доступа к камере'
+      arStatus.value = '❌ Нет доступа к камере'
       return null
     }
   }
   
-  // ✅ Создаем AR сцену
-  const createARScene = async () => {
-    // Ждем загрузки камеры
+  // Создаем тестовую 3D сцену
+  const createTestScene = async () => {
+    // Запускаем камеру
     const stream = await startCamera()
     if (!stream) return
   
     // Ждем загрузки A-Frame
     if (typeof AFRAME === 'undefined') {
-      setTimeout(createARScene, 100)
+      arStatus.value = '⏳ Загрузка AR...'
+      setTimeout(createTestScene, 500)
       return
     }
   
     try {
-      // Создаем сцену
+      // Создаем простую сцену БЕЗ AR.js
       const sceneElement = document.createElement('a-scene')
       sceneElement.setAttribute('embedded', 'true')
       sceneElement.setAttribute('vr-mode-ui', 'enabled: false')
-      sceneElement.setAttribute('renderer', 'antialias: true; alpha: true')
-      sceneElement.setAttribute('arjs', 
-        'sourceType: webcam; ' +
-        'debugUIEnabled: false; ' +
-        'detectionMode: mono_and_matrix; ' +
-        'matrixCodeType: 3x3;'
-      )
-  
-      // Создаем маркер
-      const markerElement = document.createElement('a-marker')
-      markerElement.setAttribute('type', 'barcode')
-      markerElement.setAttribute('value', barcodeValue.value)
-      markerElement.setAttribute('emitevents', 'true')
-  
-      // Создаем контент для маркера
-      const contentElement = document.createElement('a-entity')
-  
-      // Белая панель с информацией
-      const background = document.createElement('a-plane')
-      background.setAttribute('color', '#FFFFFF')
-      background.setAttribute('width', '1.8')
-      background.setAttribute('height', '1.2')
-      background.setAttribute('position', '0 1.2 0')
-      background.setAttribute('opacity', '0.9')
-  
-      // Название устройства
-      const title = document.createElement('a-text')
-      title.setAttribute('value', props.deviceData?.name_model || 'Устройство')
-      title.setAttribute('align', 'center')
-      title.setAttribute('color', '#000000')
-      title.setAttribute('position', '0 1.5 0.01')
-      title.setAttribute('width', '1.6')
-  
-      // Тип устройства
-      const type = document.createElement('a-text')
-      type.setAttribute('value', props.deviceData?.name_type || 'Тип не указан')
-      type.setAttribute('align', 'center')
-      type.setAttribute('color', '#666666')
-      type.setAttribute('position', '0 1.3 0.01')
-      type.setAttribute('width', '1.6')
-      type.setAttribute('scale', '0.8 0.8 0.8')
-  
-      // Собираем структуру
-      contentElement.appendChild(background)
-      contentElement.appendChild(title)
-      contentElement.appendChild(type)
-      markerElement.appendChild(contentElement)
-  
-      // Камера
+      
+      // ✅ ПРОСТАЯ КАМЕРА (не AR)
       const cameraElement = document.createElement('a-entity')
       cameraElement.setAttribute('camera', '')
-      cameraElement.setAttribute('position', '0 0 0')
-  
+      cameraElement.setAttribute('position', '0 1.6 0')
+      cameraElement.setAttribute('look-controls', '')
+      
+      // ✅ ТЕСТОВАЯ 3D МОДЕЛЬ - появляется сразу!
+      const testModel = document.createElement('a-entity')
+      testModel.setAttribute('position', '0 0.5 -2') // Перед камерой
+      
+      // Белая панель с информацией
+      const panel = document.createElement('a-box')
+      panel.setAttribute('color', '#007AFF')
+      panel.setAttribute('width', '1.5')
+      panel.setAttribute('height', '1.0')
+      panel.setAttribute('depth', '0.1')
+      panel.setAttribute('position', '0 0.8 0')
+      
+      // Текст с названием устройства
+      const title = document.createElement('a-text')
+      title.setAttribute('value', props.deviceData?.name_model || 'Тестовое устройство')
+      title.setAttribute('align', 'center')
+      title.setAttribute('color', '#FFFFFF')
+      title.setAttribute('position', '0 0.8 0.06')
+      title.setAttribute('width', '1.4')
+      
+      // Тип устройства
+      const type = document.createElement('a-text')
+      type.setAttribute('value', props.deviceData?.name_type || 'Тестовый тип')
+      type.setAttribute('align', 'center')
+      type.setAttribute('color', '#CCCCCC')
+      type.setAttribute('position', '0 0.6 0.06')
+      type.setAttribute('width', '1.4')
+      type.setAttribute('scale', '0.8 0.8 0.8')
+      
+      // Вращающаяся сфера для наглядности
+      const sphere = document.createElement('a-sphere')
+      sphere.setAttribute('color', '#FF3B30')
+      sphere.setAttribute('radius', '0.3')
+      sphere.setAttribute('position', '0 0 0')
+      sphere.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 5000')
+      
+      // Собираем модель
+      testModel.appendChild(panel)
+      testModel.appendChild(title)
+      testModel.appendChild(type)
+      testModel.appendChild(sphere)
+      
+      // Добавляем вращение всей модели
+      testModel.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 10000')
+      
       // Собираем сцену
-      sceneElement.appendChild(markerElement)
       sceneElement.appendChild(cameraElement)
-  
+      sceneElement.appendChild(testModel)
+      
       // Добавляем на страницу
       const container = document.querySelector('.ar-container')
       if (container) {
-        // Вставляем перед интерфейсом
         const uiElement = container.querySelector('.ar-ui')
         container.insertBefore(sceneElement, uiElement)
       }
-  
-      // Обработчики событий
-      markerElement.addEventListener('markerFound', () => {
-        markerVisible.value = true
-        arStatus.value = '✅ Устройство распознано!'
-      })
-  
-      markerElement.addEventListener('markerLost', () => {
-        markerVisible.value = false
-        arStatus.value = 'Поиск QR-кода...'
-      })
-  
-      console.log('AR сцена создана, barcode:', barcodeValue.value)
+      
+      arStatus.value = '✅ 3D модель загружена! Должна быть видна синяя панель'
+      console.log('✅ Тестовая сцена создана')
+      
+      // Сохраняем для очистки
+      window.testScene = sceneElement
   
     } catch (error) {
-      console.error('Ошибка создания AR сцены:', error)
-      arStatus.value = 'Ошибка AR: ' + error.message
+      console.error('Ошибка создания тестовой сцены:', error)
+      arStatus.value = '❌ Ошибка: ' + error.message
     }
   }
   
@@ -211,8 +193,9 @@
     }
     
     // Удаляем сцену
-    const scene = document.querySelector('a-scene')
-    if (scene) scene.remove()
+    if (window.testScene) {
+      window.testScene.remove()
+    }
     
     // Удаляем видео элемент
     const video = document.getElementById('ar-video')
@@ -222,7 +205,8 @@
   }
   
   onMounted(() => {
-    createARScene()
+    arStatus.value = '🚀 Запуск теста...'
+    createTestScene()
   })
   
   onUnmounted(() => {
@@ -254,7 +238,7 @@
     z-index: 2;
   }
   
-  /* Интерфейс поверх AR */
+  /* Интерфейс */
   .ar-ui {
     position: absolute;
     top: 0;
@@ -265,9 +249,7 @@
     z-index: 3;
   }
   
-  /* Остальные стили без изменений */
-  .scanning-message,
-  .found-message {
+  .test-message {
     position: absolute;
     top: 8%;
     left: 0;
@@ -277,15 +259,41 @@
     pointer-events: none;
   }
   
-  .scanning-message h3,
-  .found-message h3 {
+  .test-message h3 {
     margin: 0 0 12px 0;
     font-size: 20px;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(255, 59, 48, 0.9);
     display: inline-block;
     padding: 12px 24px;
     border-radius: 20px;
     backdrop-filter: blur(10px);
+  }
+  
+  .test-message p {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    color: #cccccc;
+    background: rgba(0, 0, 0, 0.6);
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+  }
+  
+  .debug-info {
+    margin-top: 16px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 12px 16px;
+    border-radius: 12px;
+    display: inline-block;
+    text-align: left;
+  }
+  
+  .debug-info p {
+    margin: 4px 0;
+    font-size: 12px;
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
   }
   
   .close-button {
