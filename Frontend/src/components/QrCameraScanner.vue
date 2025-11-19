@@ -1,8 +1,8 @@
-<!-- src/views/QrCameraScannerFixed.vue -->
+<!-- QrCameraScannerFixed.vue -->
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import jsQR from 'jsqr'
-
+import QrResultModal from './QrResultModal.vue'
 
 const video = ref(null)
 const canvas = ref(null)
@@ -31,7 +31,7 @@ onUnmounted(() => {
   if (stream.value) stream.value.getTracks().forEach(t => t.stop())
 })
 
-const scanNow = async () => {
+const scanNow = () => {
   if (!video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
     errorMessage.value = 'Камера ещё не готова'
     return
@@ -48,35 +48,26 @@ const scanNow = async () => {
   })
 
   if (code) {
-    // Рисуем зелёную рамку
-    ctx.strokeStyle = '#00ff00'
-    ctx.lineWidth = 12
-    ctx.beginPath()
-    ctx.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y)
-    ctx.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y)
-    ctx.lineTo(code.location.bottomRightCorner.x, code.location.bottomRightCorner.y)
-    ctx.lineTo(code.location.bottomLeftCorner.x, code.location.bottomLeftCorner.y)
-    ctx.closePath()
-    ctx.stroke()
-
+    drawGreenBorder(ctx, code.location)
     lastFrameImage.value = canvas.value.toDataURL('image/png')
-    lastScannedData.value = code.data.trim()
-
-    // Показываем модалку в любом случае
+    lastScannedData.value = code.data
     showResultModal.value = true
     errorMessage.value = ''
-
-    // Если это UUID — через 1 секунду переходим на страницу устройства
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lastScannedData.value)
-    if (isUuid) {
-      setTimeout(() => {
-        window.location.href = `/device/${lastScannedData.value}`
-      }, 1000)
-    }
-
   } else {
     errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
   }
+}
+
+const drawGreenBorder = (ctx, location) => {
+  ctx.strokeStyle = '#00ff00'
+  ctx.lineWidth = 12
+  ctx.beginPath()
+  ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y)
+  ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y)
+  ctx.lineTo(location.bottomRightCorner.x, location.bottomRightCorner.y)
+  ctx.lineTo(location.bottomLeftCorner.x, location.bottomLeftCorner.y)
+  ctx.closePath()
+  ctx.stroke()
 }
 
 const closeModal = () => {
@@ -86,20 +77,24 @@ const closeModal = () => {
 
 <template>
   <div class="app">
+    <!-- Камера -->
     <div class="camera-wrapper">
       <video ref="video" playsinline muted class="camera-video"></video>
       <canvas ref="canvas" style="display: none;"></canvas>
       <div v-if="!stream" class="placeholder">Камера недоступна</div>
     </div>
 
+    <!-- Сообщение об ошибке -->
     <div v-if="errorMessage" class="error-message">
       {{ errorMessage }}
     </div>
 
+    <!-- Кнопка сканирования -->
     <button @click="scanNow" class="scan-button">
       Сканировать QR-код
     </button>
 
+    <!-- Модалка с результатом -->
     <QrResultModal
       v-if="showResultModal"
       :scanned-data="lastScannedData"
@@ -110,10 +105,11 @@ const closeModal = () => {
 </template>
 
 <style scoped>
+/* Главный контейнер — весь экран без прокрутки */
 .app {
   position: fixed;
   inset: 0;
-  background: #000;
+  background: #000;                     /* чёрный фон как на твоём скриншоте */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -121,9 +117,10 @@ const closeModal = () => {
   gap: 32px;
   padding: 20px;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* Квадрат камеры — строго 1:1, максимум 90% ширины экрана */
 .camera-wrapper {
   position: relative;
   width: 90vw;
@@ -147,13 +144,14 @@ const closeModal = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0,0,0,0.9);
+  background: rgba(0,0,0,0.85);
   color: white;
   font-size: 18px;
   text-align: center;
   padding: 20px;
 }
 
+/* Красное сообщение — как на скриншоте */
 .error-message {
   background: #ff3b30;
   color: white;
@@ -166,6 +164,7 @@ const closeModal = () => {
   box-shadow: 0 8px 25px rgba(255, 59, 48, 0.3);
 }
 
+/* Кнопка — точно как у тебя на фото */
 .scan-button {
   background: #000;
   color: white;
@@ -182,5 +181,6 @@ const closeModal = () => {
 
 .scan-button:active {
   transform: scale(0.95);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 </style>
