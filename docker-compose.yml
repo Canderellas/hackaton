@@ -23,7 +23,7 @@ services:
   # ASP.NET Core Backend
   backend:
     build: 
-      context: ./backend
+      context: ./Backend_hackaton
       dockerfile: Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
