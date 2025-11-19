@@ -231,8 +231,8 @@ onUnmounted(() => {
             <h4>Характеристики:</h4>
             <div class="properties-grid">
               <div v-for="(prop, idx) in deviceData.properties.slice(0, 4)" :key="idx" class="property">
-                <strong>{{ prop.Name }}:</strong> 
-                <span>{{ prop.Value }}</span>
+                <strong>{{ prop.name }}:</strong> 
+                <span>{{ prop.value }}</span>
               </div>
             </div>
           </div>
