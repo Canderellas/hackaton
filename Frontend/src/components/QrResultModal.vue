@@ -176,8 +176,8 @@ const formatDate = (dateString) => {
                 <span>📊</span>
               </div>
               <div class="property-content">
-                <strong class="property-name">{{ property.Name || 'Свойство' }}</strong>
-                <span class="property-value">{{ property.Value || 'Не указано' }}</span>
+                <strong class="property-name">{{ property.name || 'Свойство' }}</strong>
+                <span class="property-value">{{ property.value || 'Не указано' }}</span>
               </div>
             </div>
           </div>
