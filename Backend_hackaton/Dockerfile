@@ -1,8 +1,6 @@
-# Backend/Dockerfile
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /app
 
-# Копируем всё
 COPY . .
 RUN dotnet restore
 RUN dotnet publish -c Release -o out
