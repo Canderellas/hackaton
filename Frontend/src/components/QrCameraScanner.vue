@@ -1,4 +1,3 @@
-<!-- src/components/QrCameraScanner.vue -->
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import jsQR from 'jsqr'
@@ -51,12 +50,10 @@ const fetchDeviceData = async (deviceId) => {
 }
 
 const extractDeviceId = (data) => {
-  // Если это прямой GUID
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
     return data
   }
   
-  // Если это URL, пытаемся извлечь ID из пути
   try {
     const url = new URL(data)
     const pathParts = url.pathname.split('/')
@@ -95,7 +92,7 @@ const scanNow = async () => {
     
     if (data) {
       deviceData.value = data
-      showARView.value = true // Запускаем AR!
+      showARView.value = true
     }
   } else {
     errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
@@ -104,7 +101,7 @@ const scanNow = async () => {
 
 const drawGreenBorder = (ctx, location) => {
   ctx.strokeStyle = '#00ff00'
-  ctx.lineWidth = 12
+  ctx.lineWidth = 4
   ctx.beginPath()
   ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y)
   ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y)
@@ -145,7 +142,7 @@ onUnmounted(() => {
 
     <!-- Кнопка сканирования -->
     <button @click="scanNow" class="scan-button">
-      Сканировать QR-код
+      📷 Сканировать QR-код
     </button>
 
     <!-- AR режим -->
@@ -157,7 +154,6 @@ onUnmounted(() => {
     />
   </div>
 </template>
-
 <style scoped>
 .app {
   position: fixed;
