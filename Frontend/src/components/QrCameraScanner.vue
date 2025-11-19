@@ -1,21 +1,20 @@
-<!-- QrCameraScanner.vue -->
+<!-- src/components/QrCameraScanner.vue -->
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import jsQR from 'jsqr'
-import QrResultModal from './QrResultModal.vue'
-import ArDeviceInfo from './ArDeviceInfo.vue' // ← ДОБАВИТЬ ИМПОРТ
+import ArDeviceInfo from './ArDeviceInfo.vue'
 
+// Refs
 const video = ref(null)
 const canvas = ref(null)
 const stream = ref(null)
 const errorMessage = ref('')
-const showResultModal = ref(false)
-const showARView = ref(false) // ← ДОБАВИТЬ НОВУЮ ПЕРЕМЕННУЮ
+const showARView = ref(false)
+const deviceData = ref(null)
 const lastScannedData = ref('')
-const lastFrameImage = ref('')
-const deviceData = ref(null) // ← ДОБАВИТЬ ДЛЯ ХРАНЕНИЯ ДАННЫХ
 
-onMounted(async () => {
+// Функции
+const startCamera = async () => {
   try {
     stream.value = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' }
@@ -28,13 +27,8 @@ onMounted(async () => {
     errorMessage.value = 'Нет доступа к камере'
     console.error(err)
   }
-})
+}
 
-onUnmounted(() => {
-  if (stream.value) stream.value.getTracks().forEach(t => t.stop())
-})
-
-// Функция для загрузки данных устройства
 const fetchDeviceData = async (deviceId) => {
   try {
     const response = await fetch(`https://comunada.store/api/device/${deviceId}`)
@@ -56,7 +50,6 @@ const fetchDeviceData = async (deviceId) => {
   }
 }
 
-// Функция извлечения ID из QR-кода
 const extractDeviceId = (data) => {
   // Если это прямой GUID
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
@@ -76,7 +69,7 @@ const extractDeviceId = (data) => {
   }
 }
 
-const scanNow = async () => { // ← СДЕЛАТЬ ASYNC
+const scanNow = async () => {
   if (!video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
     errorMessage.value = 'Камера ещё не готова'
     return
@@ -94,17 +87,15 @@ const scanNow = async () => { // ← СДЕЛАТЬ ASYNC
 
   if (code) {
     drawGreenBorder(ctx, code.location)
-    lastFrameImage.value = canvas.value.toDataURL('image/png')
     lastScannedData.value = code.data
     errorMessage.value = ''
     
-    // ЗАМЕНИТЬ ПОКАЗ МОДАЛКИ НА ЗАГРУЗКУ ДАННЫХ
     const deviceId = extractDeviceId(code.data)
     const data = await fetchDeviceData(deviceId)
     
     if (data) {
       deviceData.value = data
-      showARView.value = true // ← ПОКАЗЫВАЕМ AR ВМЕСТО МОДАЛКИ
+      showARView.value = true // Запускаем AR!
     }
   } else {
     errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
@@ -123,14 +114,19 @@ const drawGreenBorder = (ctx, location) => {
   ctx.stroke()
 }
 
-const closeModal = () => {
-  showResultModal.value = false
-}
-
-const closeAR = () => { // ← ДОБАВИТЬ ФУНКЦИЮ ЗАКРЫТИЯ AR
+const closeAR = () => {
   showARView.value = false
   deviceData.value = null
 }
+
+// Жизненный цикл
+onMounted(() => {
+  startCamera()
+})
+
+onUnmounted(() => {
+  if (stream.value) stream.value.getTracks().forEach(t => t.stop())
+})
 </script>
 
 <template>
@@ -152,25 +148,17 @@ const closeAR = () => { // ← ДОБАВИТЬ ФУНКЦИЮ ЗАКРЫТИЯ 
       Сканировать QR-код
     </button>
 
-    <!-- АР-режим вместо модалки -->
+    <!-- AR режим -->
     <ArDeviceInfo
       v-if="showARView"
+      :scanned-data="lastScannedData"
       :device-data="deviceData"
       @close="closeAR"
-    />
-
-    <!-- Старая модалка (можно оставить как fallback) -->
-    <QrResultModal
-      v-if="showResultModal && !showARView"
-      :scanned-data="lastScannedData"
-      :frame-image="lastFrameImage"
-      @close="closeModal"
     />
   </div>
 </template>
 
 <style scoped>
-/* Стили остаются без изменений */
 .app {
   position: fixed;
   inset: 0;

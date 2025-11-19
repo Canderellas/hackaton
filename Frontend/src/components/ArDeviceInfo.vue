@@ -1,112 +1,163 @@
-<!-- ArDeviceInfo.vue -->
+<!-- src/components/ArDeviceInfo.vue -->
 <template>
     <div class="ar-container">
-      <!-- Фон - живая камера -->
-      <video 
-        ref="video" 
-        class="camera-background"
-        playsinline
-        muted
-        autoplay
-      ></video>
-      
-      <!-- Затемнение для лучшей читаемости -->
-      <div class="overlay"></div>
-      
-      <!-- Карточка с информацией об устройстве -->
-      <div class="device-info-card">
-        <!-- Заголовок -->
-        <div class="card-header">
-          <h2 class="device-title">🔧 {{ deviceData.name_model || 'Устройство' }}</h2>
-          <div class="device-type">{{ deviceData.name_type || 'Тип не указан' }}</div>
-        </div>
-        
-        <!-- Основные свойства -->
-        <div class="properties-section">
-          <h3 class="section-title">Характеристики</h3>
-          <div class="properties-list">
-            <div 
+      <!-- AR сцена -->
+      <a-scene 
+        embedded 
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true;"
+      >
+        <!-- Маркер для QR-кода -->
+        <a-marker 
+          type="barcode" 
+          :value="barcodeValue"
+          @markerFound="onMarkerFound"
+          @markerLost="onMarkerLost"
+        >
+          <!-- 3D панель с информацией -->
+          <a-entity v-if="deviceData" :visible="markerVisible">
+            <!-- Фон панели -->
+            <a-plane 
+              color="#FFFFFF" 
+              width="1.5" 
+              height="1.0"
+              position="0 1.2 0"
+              opacity="0.95"
+            ></a-plane>
+            
+            <!-- Заголовок -->
+            <a-text 
+              :value="deviceData.name_model" 
+              align="center" 
+              color="#000000"
+              position="0 1.5 0.01"
+              width="1.4"
+            ></a-text>
+            
+            <a-text 
+              :value="deviceData.name_type" 
+              align="center" 
+              color="#666666"
+              position="0 1.35 0.01"
+              width="1.2"
+              scale="0.8 0.8 0.8"
+            ></a-text>
+  
+            <!-- Свойства -->
+            <a-entity 
               v-for="(property, index) in visibleProperties" 
-              :key="index" 
-              class="property-item"
+              :key="index"
+              :position="`-0.6 ${1.2 - (index * 0.15)} 0.01`"
             >
-              <strong class="property-name">{{ property.name }}:</strong>
-              <span class="property-value">{{ property.value }}</span>
-            </div>
-          </div>
+              <a-text 
+                :value="`${property.Name}: ${property.Value}`"
+                align="left"
+                color="#000000"
+                width="1.2"
+                scale="0.7 0.7 0.7"
+              ></a-text>
+            </a-entity>
+  
+            <!-- Последняя операция -->
+            <a-entity v-if="lastOperation" position="0 0.8 0.01">
+              <a-text 
+                :value="`📍 ${lastOperation.Place}`"
+                align="center"
+                color="#007AFF"
+                width="1.2"
+                scale="0.6 0.6 0.6"
+              ></a-text>
+              <a-text 
+                :value="formatDate(lastOperation.DateOperation)"
+                align="center"
+                color="#8E8E93"
+                position="0 -0.08 0"
+                width="1.0"
+                scale="0.5 0.5 0.5"
+              ></a-text>
+            </a-entity>
+          </a-entity>
+        </a-marker>
+  
+        <a-entity camera></a-entity>
+      </a-scene>
+  
+      <!-- Интерфейс -->
+      <div class="ar-ui">
+        <div v-if="!markerVisible" class="scanning-message">
+          <h3>Наведите камеру на QR-код</h3>
+          <p>Информация появится над QR-кодом</p>
         </div>
         
-        <!-- Последняя операция -->
-        <div v-if="lastOperation" class="operation-section">
-          <h3 class="section-title">Последняя операция</h3>
-          <div class="operation-info">
-            <div class="operation-place">📍 {{ lastOperation.place }}</div>
-            <div class="operation-date">📅 {{ formatDate(lastOperation.date) }}</div>
-            <div v-if="lastOperation.comment" class="operation-comment">
-              💬 {{ lastOperation.comment }}
-            </div>
-          </div>
+        <div v-else class="found-message">
+          <h3>✅ Устройство распознано</h3>
+          <p>Двигайте камеру - информация следует за QR-кодом</p>
         </div>
-        
-        <!-- Описания -->
-        <div v-if="deviceData.description_model || deviceData.description_type" class="descriptions-section">
-          <div v-if="deviceData.description_model" class="description-item">
-            <strong>Описание модели:</strong> {{ deviceData.description_model }}
-          </div>
-          <div v-if="deviceData.description_type" class="description-item">
-            <strong>Описание типа:</strong> {{ deviceData.description_type }}
-          </div>
-        </div>
+  
+        <button class="close-button" @click="closeAR">
+          Закрыть AR
+        </button>
       </div>
-      
-      <!-- Кнопка закрытия -->
-      <button class="close-ar-button" @click="closeAR">
-        Закрыть AR просмотр
-      </button>
+  
+      <!-- Загрузка -->
+      <div v-if="loading" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Загрузка AR...</p>
+      </div>
     </div>
   </template>
   
   <script setup>
-  import { ref, onMounted, computed } from 'vue'
+  import { ref, onMounted, onUnmounted, computed } from 'vue'
   
   const props = defineProps({
+    scannedData: String,
     deviceData: Object
   })
   
   const emit = defineEmits(['close'])
   
-  const video = ref(null)
+  const loading = ref(true)
+  const markerVisible = ref(false)
   
-  // Показываем только первые 5 свойств для компактности
+  // Генерируем barcode value из scannedData
+  const barcodeValue = computed(() => {
+    if (!props.scannedData) return 0
+    
+    let hash = 0
+    for (let i = 0; i < props.scannedData.length; i++) {
+      hash = ((hash << 5) - hash) + props.scannedData.charCodeAt(i)
+      hash |= 0
+    }
+    return Math.abs(hash) % 1000
+  })
+  
+  // Ограничиваем свойства для отображения
   const visibleProperties = computed(() => {
-    return props.deviceData.properties?.slice(0, 5) || []
+    return props.deviceData?.properties?.slice(0, 4) || []
   })
   
   // Последняя операция
   const lastOperation = computed(() => {
-    return props.deviceData.operation_logs?.[0] || null
+    return props.deviceData?.operation_logs?.[0] || null
   })
   
-  onMounted(async () => {
-    await startCamera()
+  onMounted(() => {
+    // Даем время на загрузку AR
+    setTimeout(() => {
+      loading.value = false
+    }, 2000)
   })
   
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      })
-      if (video.value) {
-        video.value.srcObject = stream
-      }
-    } catch (error) {
-      console.error('Ошибка доступа к камере:', error)
-      // Можно показать fallback - просто чёрный фон
-    }
+  const onMarkerFound = () => {
+    console.log('Маркер найден!')
+    markerVisible.value = true
+  }
+  
+  const onMarkerLost = () => {
+    console.log('Маркер потерян')
+    markerVisible.value = false
   }
   
   const formatDate = (dateString) => {
@@ -116,9 +167,7 @@
       return date.toLocaleDateString('ru-RU', {
         day: '2-digit',
         month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        year: 'numeric'
       })
     } catch {
       return dateString
@@ -126,10 +175,6 @@
   }
   
   const closeAR = () => {
-    // Останавливаем камеру
-    if (video.value && video.value.srcObject) {
-      video.value.srcObject.getTracks().forEach(track => track.stop())
-    }
     emit('close')
   }
   </script>
@@ -141,211 +186,104 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: #000;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px;
-    box-sizing: border-box;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: black;
+    overflow: hidden;
   }
   
-  /* Камера как фон */
-  .camera-background {
+  .a-scene {
+    width: 100%;
+    height: 100%;
+  }
+  
+  /* Интерфейс поверх AR */
+  .ar-ui {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    z-index: 1;
+    pointer-events: none;
+    z-index: 100;
   }
   
-  /* Затемнение для читаемости текста */
-  .overlay {
+  .scanning-message,
+  .found-message {
     position: absolute;
-    top: 0;
+    top: 15%;
     left: 0;
     width: 100%;
-    height: 100%;
-    background: linear-gradient(
-      to bottom,
-      rgba(0, 0, 0, 0.6) 0%,
-      rgba(0, 0, 0, 0.4) 30%,
-      rgba(0, 0, 0, 0.3) 50%,
-      rgba(0, 0, 0, 0.4) 70%,
-      rgba(0, 0, 0, 0.6) 100%
-    );
-    z-index: 2;
+    text-align: center;
+    color: white;
+    pointer-events: none;
   }
   
-  /* Карточка с информацией */
-  .device-info-card {
-    position: relative;
-    z-index: 3;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
+  .scanning-message h3,
+  .found-message h3 {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    background: rgba(0, 0, 0, 0.7);
+    display: inline-block;
+    padding: 10px 20px;
     border-radius: 20px;
-    padding: 24px;
-    max-width: 400px;
-    width: 90%;
-    max-height: 70vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    margin-top: 10%;
+    backdrop-filter: blur(10px);
   }
   
-  .card-header {
-    margin-bottom: 20px;
-    border-bottom: 2px solid #007aff;
-    padding-bottom: 16px;
-  }
-  
-  .device-title {
-    margin: 0 0 8px 0;
-    font-size: 22px;
-    font-weight: 700;
-    color: #1d1d1f;
-    line-height: 1.2;
-  }
-  
-  .device-type {
-    font-size: 16px;
-    color: #8e8e93;
-    font-weight: 500;
-  }
-  
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #007aff;
-    margin: 0 0 12px 0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  
-  .properties-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  
-  .property-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .property-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #1d1d1f;
-    flex-shrink: 0;
-  }
-  
-  .property-value {
-    font-size: 15px;
-    color: #48484a;
-    text-align: right;
-    line-height: 1.3;
-  }
-  
-  .operation-section {
-    margin-bottom: 20px;
-    padding: 16px;
-    background: rgba(0, 122, 255, 0.1);
-    border-radius: 12px;
-    border-left: 4px solid #007aff;
-  }
-  
-  .operation-info {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .operation-place,
-  .operation-date,
-  .operation-comment {
+  .scanning-message p,
+  .found-message p {
+    margin: 0;
     font-size: 14px;
-    line-height: 1.3;
+    color: #cccccc;
+    background: rgba(0, 0, 0, 0.5);
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
   }
   
-  .operation-place {
-    font-weight: 600;
-    color: #1d1d1f;
-  }
-  
-  .operation-date {
-    color: #8e8e93;
-  }
-  
-  .operation-comment {
-    color: #48484a;
-    font-style: italic;
-  }
-  
-  .descriptions-section {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .description-item {
-    font-size: 14px;
-    line-height: 1.4;
-    color: #48484a;
-  }
-  
-  .description-item strong {
-    color: #1d1d1f;
-  }
-  
-  /* Кнопка закрытия */
-  .close-ar-button {
-    position: relative;
-    z-index: 3;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    color: #1d1d1f;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    padding: 16px 32px;
-    border-radius: 50px;
-    font-size: 17px;
-    font-weight: 600;
+  .close-button {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 25px;
     cursor: pointer;
-    margin-bottom: 5%;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    transition: all 0.2s;
+    pointer-events: auto;
+    font-size: 16px;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
   }
   
-  .close-ar-button:active {
-    transform: scale(0.95);
-    background: rgba(255, 255, 255, 0.8);
+  .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    z-index: 1000;
   }
   
-  /* Адаптивность */
-  @media (max-width: 480px) {
-    .device-info-card {
-      padding: 20px;
-      margin-top: 5%;
-    }
-    
-    .device-title {
-      font-size: 20px;
-    }
-    
-    .property-item {
-      flex-direction: column;
-      gap: 4px;
-    }
-    
-    .property-value {
-      text-align: left;
-    }
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #007aff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
   </style>
