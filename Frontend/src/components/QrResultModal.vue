@@ -181,7 +181,7 @@ const formatDate = (dateString) => {
                 <strong class="operation-place">{{ log.place || 'Место не указано' }}</strong>
                 <span class="operation-date">{{ formatDate(log.date) }}</span>
               </div>
-              <p v-if="log.Comment" class="operation-comment">{{ log.comment }}</p>
+              <p v-if="log.comment" class="operation-comment">{{ log.comment }}</p>
             </div>
           </div>
         </div>
