@@ -1,21 +1,24 @@
 <!-- src/components/ArDeviceInfo.vue -->
 <template>
     <div class="ar-container">
-      <!-- AR сцена -->
+      <!-- AR сцена с встроенным AR.js -->
       <a-scene 
         embedded 
-        arjs="sourceType: webcam; debugUIEnabled: false;"
+        arjs='sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;'
         vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true;"
       >
         <!-- Маркер для QR-кода -->
         <a-marker 
           type="barcode" 
           :value="barcodeValue"
-          @markerFound="onMarkerFound"
-          @markerLost="onMarkerLost"
+          @markerfound="onMarkerFound"
+          @markerlost="onMarkerLost"
+          emitevents="true"
+          cursor="rayOrigin: mouse"
         >
           <!-- 3D панель с информацией -->
-          <a-entity v-if="deviceData" :visible="markerVisible">
+          <a-entity v-if="deviceData">
             <!-- Фон панели -->
             <a-plane 
               color="#FFFFFF" 
@@ -65,13 +68,9 @@
   
       <!-- Интерфейс -->
       <div class="ar-ui">
-        <div v-if="!markerVisible" class="scanning-message">
+        <div class="scanning-message">
           <h3>Наведите камеру на QR-код</h3>
           <p>Информация появится над QR-кодом</p>
-        </div>
-        
-        <div v-else class="found-message">
-          <h3>✅ Устройство распознано</h3>
         </div>
   
         <button class="close-button" @click="closeAR">
@@ -90,8 +89,6 @@
   })
   
   const emit = defineEmits(['close'])
-  
-  const markerVisible = ref(false)
   
   // Генерируем barcode value из scannedData
   const barcodeValue = computed(() => {
@@ -112,12 +109,10 @@
   
   const onMarkerFound = () => {
     console.log('Маркер найден!')
-    markerVisible.value = true
   }
   
   const onMarkerLost = () => {
     console.log('Маркер потерян')
-    markerVisible.value = false
   }
   
   const closeAR = () => {
@@ -151,8 +146,7 @@
     z-index: 100;
   }
   
-  .scanning-message,
-  .found-message {
+  .scanning-message {
     position: absolute;
     top: 15%;
     left: 0;
@@ -162,14 +156,24 @@
     pointer-events: none;
   }
   
-  .scanning-message h3,
-  .found-message h3 {
+  .scanning-message h3 {
     margin: 0 0 10px 0;
     font-size: 18px;
     background: rgba(0, 0, 0, 0.7);
     display: inline-block;
     padding: 10px 20px;
     border-radius: 20px;
+    backdrop-filter: blur(10px);
+  }
+  
+  .scanning-message p {
+    margin: 0;
+    font-size: 14px;
+    color: #cccccc;
+    background: rgba(0, 0, 0, 0.5);
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 15px;
     backdrop-filter: blur(10px);
   }
   
