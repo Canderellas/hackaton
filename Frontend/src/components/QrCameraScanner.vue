@@ -2,7 +2,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import jsQR from 'jsqr'
-import QrResultModal from '@/components/QrResultModal.vue'
+
 
 const video = ref(null)
 const canvas = ref(null)
