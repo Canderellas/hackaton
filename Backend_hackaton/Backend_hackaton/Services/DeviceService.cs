@@ -26,7 +26,7 @@ namespace Backend_hackaton.Services
             Device? device = await _context.Devices
             .Include(c => c.FkModelNavigation)
                 .ThenInclude(n => n.FkTypeNavigation)
-            .Include(c => c.OperationalLogs)
+            .Include(c => c.OperationalLogs.OrderBy(p => p.DateOperation))
             .Include(c => c.DevicePropertyValues)
                 .ThenInclude(b => b.FkModelPropertyNavigation)
                     .ThenInclude(d => d.FkPropertyNavigation)

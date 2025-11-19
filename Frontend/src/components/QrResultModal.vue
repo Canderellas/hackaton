@@ -167,7 +167,6 @@ const formatDate = (dateString) => {
         <!-- Карточка устройства -->
         <div class="device-card">
           <div class="device-header">
-            <div class="device-icon">💻</div>
             <div class="device-info">
               <h3 class="device-name">{{ deviceData.name_model || 'Не указано' }}</h3>
               <p class="device-type">{{ deviceData.name_type || 'Тип не указан' }}</p>
@@ -191,12 +190,9 @@ const formatDate = (dateString) => {
               :key="index" 
               class="property-card"
             >
-              <div class="property-icon">
-                <span>📊</span>
-              </div>
               <div class="property-content">
-                <strong class="property-name">{{ property.Name || 'Свойство' }}</strong>
-                <span class="property-value">{{ property.Value || 'Не указано' }}</span>
+                <strong class="property-name">{{ property.name || 'Свойство' }}</strong>
+                <span class="property-value">{{ property.value || 'Не указано' }}</span>
               </div>
             </div>
           </div>
