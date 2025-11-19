@@ -162,8 +162,8 @@ const formatDate = (dateString) => {
               :key="index" 
               class="info-item"
             >
-              <strong class="info-label">{{ property.Name || 'Свойство' }}</strong>
-              <span class="info-value">{{ property.Value || 'Не указано' }}</span>
+              <strong class="info-label">{{ property.name || 'Свойство' }}</strong>
+              <span class="info-value">{{ property.value || 'Не указано' }}</span>
             </div>
           </div>
         </div>
@@ -178,10 +178,10 @@ const formatDate = (dateString) => {
               class="operation-item"
             >
               <div class="operation-header">
-                <strong class="operation-place">{{ log.Place || 'Место не указано' }}</strong>
-                <span class="operation-date">{{ formatDate(log.DateOperation) }}</span>
+                <strong class="operation-place">{{ log.place || 'Место не указано' }}</strong>
+                <span class="operation-date">{{ formatDate(log.date) }}</span>
               </div>
-              <p v-if="log.Comment" class="operation-comment">{{ log.Comment }}</p>
+              <p v-if="log.Comment" class="operation-comment">{{ log.comment }}</p>
             </div>
           </div>
         </div>
