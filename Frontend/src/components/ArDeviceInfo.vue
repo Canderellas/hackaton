@@ -1,27 +1,27 @@
 <!-- src/components/ArDeviceInfo.vue -->
 <template>
     <div class="ar-container">
-      <!-- Видео элемент для камеры -->
+      <!-- Видео с камеры -->
       <video 
-        id="ar-video" 
+        ref="videoElement" 
         autoplay 
         playsinline 
         muted
         style="position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1;"
       ></video>
       
-      <!-- A-Frame сцена -->
+      <!-- 3D сцена -->
       <div id="ar-scene"></div>
       
       <!-- Интерфейс -->
       <div class="ar-ui">
-        <div class="test-message">
-          <h3>🧪 ТЕСТОВЫЙ РЕЖИМ</h3>
-          <p>3D модель должна быть видна в пространстве</p>
+        <div class="tracking-message">
+          <h3>🎯 Режим отслеживания QR-кода</h3>
+          <p>3D модель следует за QR-кодом в реальном времени</p>
           <div class="debug-info">
             <p>GUID: {{ currentGuid }}</p>
-            <p>Barcode: {{ barcodeValue }}</p>
             <p>Статус: {{ arStatus }}</p>
+            <p v-if="trackingPosition">Позиция: {{ trackingPosition.x }}, {{ trackingPosition.y }}</p>
           </div>
         </div>
   
@@ -33,183 +33,202 @@
   </template>
   
   <script setup>
-  import { ref, computed, onMounted, onUnmounted } from 'vue'
+  import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+  import jsQR from 'jsqr'
   
   const props = defineProps({
     scannedData: String,
-    deviceData: Object
+    deviceData: Object,
+    qrLocation: Object,
+    videoElement: HTMLVideoElement
   })
   
   const emit = defineEmits(['close'])
   
-  const arStatus = ref('Запуск теста...')
+  const arStatus = ref('Инициализация отслеживания...')
   const currentGuid = ref('')
   const videoStream = ref(null)
+  const trackingPosition = ref(null)
+  const model3D = ref(null)
+  const trackingActive = ref(false)
   
-  // Вычисляем barcode (оставляем для отладки)
-  const barcodeValue = computed(() => {
-    const guid = props.scannedData
-    if (!guid) return 100
-    
+  // Canvas для анализа видео
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  
+  // Извлекаем GUID
+  const extractedGuid = computed(() => {
+    if (!props.scannedData) return null
     try {
-      const guidMatch = guid.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
-      const cleanGuid = guidMatch ? guidMatch[0] : guid
-      currentGuid.value = cleanGuid
-      
-      let hash = 0
-      for (let i = 0; i < cleanGuid.length; i++) {
-        hash = ((hash << 5) - hash) + cleanGuid.charCodeAt(i)
-        hash |= 0
-      }
-      
-      return Math.abs(hash) % 1024
+      const guidMatch = props.scannedData.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+      return guidMatch ? guidMatch[0] : props.scannedData
     } catch {
-      return 100
+      return props.scannedData
     }
   })
   
-  // Запускаем камеру
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      })
-      
-      const videoElement = document.getElementById('ar-video')
-      if (videoElement) {
-        videoElement.srcObject = stream
-        videoStream.value = stream
-      }
-      
-      return stream
-    } catch (error) {
-      console.error('Ошибка камеры:', error)
-      arStatus.value = '❌ Нет доступа к камере'
-      return null
+  // Запускаем отслеживание QR-кода
+  const startQRTracking = async () => {
+    if (!props.videoElement) {
+      arStatus.value = '❌ Видео элемент не доступен'
+      return
     }
+  
+    // Настраиваем canvas под размер видео
+    canvas.width = props.videoElement.videoWidth
+    canvas.height = props.videoElement.videoHeight
+  
+    trackingActive.value = true
+    arStatus.value = '🎯 Начинаю отслеживание QR-кода...'
+    
+    trackQRCode()
   }
   
-  // Создаем тестовую 3D сцену
-  const createTestScene = async () => {
-    // Запускаем камеру
-    const stream = await startCamera()
-    if (!stream) return
+  // Функция отслеживания QR-кода
+  const trackQRCode = () => {
+    if (!trackingActive.value) return
   
-    // Ждем загрузки A-Frame
+    requestAnimationFrame(() => {
+      try {
+        // Рисуем текущий кадр видео на canvas
+        ctx.drawImage(props.videoElement, 0, 0, canvas.width, canvas.height)
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        
+        // Ищем QR-код
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'invertFirst'
+        })
+  
+        if (code && code.data === props.scannedData) {
+          // ✅ Нашли наш QR-код!
+          const centerX = (code.location.topLeftCorner.x + code.location.bottomRightCorner.x) / 2
+          const centerY = (code.location.topLeftCorner.y + code.location.bottomRightCorner.y) / 2
+          
+          trackingPosition.value = { x: centerX, y: centerY }
+          updateModelPosition(centerX, centerY)
+          arStatus.value = '✅ QR-код отслеживается'
+          
+        } else {
+          // QR-код не найден
+          trackingPosition.value = null
+          hideModel()
+          arStatus.value = '🔍 Поиск QR-кода...'
+        }
+      } catch (error) {
+        console.error('Ошибка отслеживания:', error)
+      }
+  
+      // Продолжаем отслеживание
+      if (trackingActive.value) {
+        setTimeout(trackQRCode, 100) // 10 FPS для производительности
+      }
+    })
+  }
+  
+  // Создаем 3D сцену
+  const create3DScene = () => {
     if (typeof AFRAME === 'undefined') {
-      arStatus.value = '⏳ Загрузка AR...'
-      setTimeout(createTestScene, 500)
+      setTimeout(create3DScene, 100)
       return
     }
   
     try {
-      // Создаем простую сцену БЕЗ AR.js
       const sceneElement = document.createElement('a-scene')
       sceneElement.setAttribute('embedded', 'true')
       sceneElement.setAttribute('vr-mode-ui', 'enabled: false')
       
-      // ✅ ПРОСТАЯ КАМЕРА (не AR)
+      // Камера
       const cameraElement = document.createElement('a-entity')
       cameraElement.setAttribute('camera', '')
-      cameraElement.setAttribute('position', '0 1.6 0')
-      cameraElement.setAttribute('look-controls', '')
+      cameraElement.setAttribute('position', '0 0 0')
       
-      // ✅ ТЕСТОВАЯ 3D МОДЕЛЬ - появляется сразу!
-      const testModel = document.createElement('a-entity')
-      testModel.setAttribute('position', '0 0.5 -2') // Перед камерой
+      // 3D модель устройства (изначально скрыта)
+      model3D.value = document.createElement('a-entity')
+      model3D.value.setAttribute('id', 'device-model')
+      model3D.value.setAttribute('visible', 'false')
       
-      // Белая панель с информацией
+      // Содержимое модели
       const panel = document.createElement('a-box')
       panel.setAttribute('color', '#007AFF')
-      panel.setAttribute('width', '1.5')
-      panel.setAttribute('height', '1.0')
-      panel.setAttribute('depth', '0.1')
-      panel.setAttribute('position', '0 0.8 0')
+      panel.setAttribute('width', '0.8')
+      panel.setAttribute('height', '0.6')
+      panel.setAttribute('depth', '0.05')
+      panel.setAttribute('position', '0 0.3 0')
       
-      // Текст с названием устройства
       const title = document.createElement('a-text')
-      title.setAttribute('value', props.deviceData?.name_model || 'Тестовое устройство')
+      title.setAttribute('value', props.deviceData?.name_model || 'Устройство')
       title.setAttribute('align', 'center')
       title.setAttribute('color', '#FFFFFF')
-      title.setAttribute('position', '0 0.8 0.06')
-      title.setAttribute('width', '1.4')
+      title.setAttribute('position', '0 0.3 0.03')
+      title.setAttribute('width', '0.7')
+      title.setAttribute('scale', '0.8 0.8 0.8')
       
-      // Тип устройства
-      const type = document.createElement('a-text')
-      type.setAttribute('value', props.deviceData?.name_type || 'Тестовый тип')
-      type.setAttribute('align', 'center')
-      type.setAttribute('color', '#CCCCCC')
-      type.setAttribute('position', '0 0.6 0.06')
-      type.setAttribute('width', '1.4')
-      type.setAttribute('scale', '0.8 0.8 0.8')
+      model3D.value.appendChild(panel)
+      model3D.value.appendChild(title)
       
-      // Вращающаяся сфера для наглядности
-      const sphere = document.createElement('a-sphere')
-      sphere.setAttribute('color', '#FF3B30')
-      sphere.setAttribute('radius', '0.3')
-      sphere.setAttribute('position', '0 0 0')
-      sphere.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 5000')
-      
-      // Собираем модель
-      testModel.appendChild(panel)
-      testModel.appendChild(title)
-      testModel.appendChild(type)
-      testModel.appendChild(sphere)
-      
-      // Добавляем вращение всей модели
-      testModel.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 10000')
-      
-      // Собираем сцену
       sceneElement.appendChild(cameraElement)
-      sceneElement.appendChild(testModel)
+      sceneElement.appendChild(model3D.value)
       
-      // Добавляем на страницу
       const container = document.querySelector('.ar-container')
       if (container) {
         const uiElement = container.querySelector('.ar-ui')
         container.insertBefore(sceneElement, uiElement)
       }
       
-      arStatus.value = '✅ 3D модель загружена! Должна быть видна синяя панель'
-      console.log('✅ Тестовая сцена создана')
+      window.arScene = sceneElement
+      arStatus.value = '✅ 3D сцена готова. Начинаю отслеживание...'
       
-      // Сохраняем для очистки
-      window.testScene = sceneElement
-  
     } catch (error) {
-      console.error('Ошибка создания тестовой сцены:', error)
-      arStatus.value = '❌ Ошибка: ' + error.message
+      console.error('Ошибка создания 3D сцены:', error)
+      arStatus.value = '❌ Ошибка 3D сцены'
+    }
+  }
+  
+  // Обновляем позицию 3D модели относительно QR-кода
+  const updateModelPosition = (qrX, qrY) => {
+    if (!model3D.value) return
+    
+    // Конвертируем координаты экрана в 3D пространство
+    const normalizedX = (qrX / canvas.width) * 2 - 1
+    const normalizedY = -(qrY / canvas.height) * 2 + 1
+    
+    // Позиционируем модель перед камерой
+    const distance = 1.5 // 1.5 метра от камеры
+    
+    // Простая проекция - модель следует за QR-кодом
+    model3D.value.setAttribute('position', `${normalizedX * 2} ${normalizedY * 1.5} -${distance}`)
+    model3D.value.setAttribute('visible', 'true')
+  }
+  
+  // Скрываем модель когда QR-код не виден
+  const hideModel = () => {
+    if (model3D.value) {
+      model3D.value.setAttribute('visible', 'false')
     }
   }
   
   const closeAR = () => {
-    // Останавливаем камеру
+    trackingActive.value = false
+    
     if (videoStream.value) {
       videoStream.value.getTracks().forEach(track => track.stop())
     }
     
-    // Удаляем сцену
-    if (window.testScene) {
-      window.testScene.remove()
+    if (window.arScene) {
+      window.arScene.remove()
     }
-    
-    // Удаляем видео элемент
-    const video = document.getElementById('ar-video')
-    if (video) video.remove()
     
     emit('close')
   }
   
   onMounted(() => {
-    arStatus.value = '🚀 Запуск теста...'
-    createTestScene()
+    currentGuid.value = extractedGuid.value
+    create3DScene()
+    startQRTracking()
   })
   
   onUnmounted(() => {
+    trackingActive.value = false
     if (videoStream.value) {
       videoStream.value.getTracks().forEach(track => track.stop())
     }
@@ -217,6 +236,7 @@
   </script>
   
   <style scoped>
+  /* Стили остаются такими же как в предыдущей версии */
   .ar-container {
     position: fixed;
     top: 0;
@@ -228,7 +248,6 @@
     z-index: 1000;
   }
   
-  /* A-Frame сцена */
   .ar-container ::v-deep(a-scene) {
     position: absolute;
     top: 0;
@@ -238,7 +257,6 @@
     z-index: 2;
   }
   
-  /* Интерфейс */
   .ar-ui {
     position: absolute;
     top: 0;
@@ -249,7 +267,7 @@
     z-index: 3;
   }
   
-  .test-message {
+  .tracking-message {
     position: absolute;
     top: 8%;
     left: 0;
@@ -259,24 +277,13 @@
     pointer-events: none;
   }
   
-  .test-message h3 {
+  .tracking-message h3 {
     margin: 0 0 12px 0;
     font-size: 20px;
-    background: rgba(255, 59, 48, 0.9);
+    background: rgba(0, 122, 255, 0.9);
     display: inline-block;
     padding: 12px 24px;
     border-radius: 20px;
-    backdrop-filter: blur(10px);
-  }
-  
-  .test-message p {
-    margin: 0 0 8px 0;
-    font-size: 16px;
-    color: #cccccc;
-    background: rgba(0, 0, 0, 0.6);
-    display: inline-block;
-    padding: 8px 16px;
-    border-radius: 12px;
     backdrop-filter: blur(10px);
   }
   
