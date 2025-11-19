@@ -21,7 +21,7 @@ namespace Backend_hackaton.Services
             }
             catch
             {
-                return new DeviceResponse();
+                return null;
             }
             Device? device = await _context.Devices
             .Include(c => c.FkModelNavigation)
