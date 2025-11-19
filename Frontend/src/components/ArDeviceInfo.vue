@@ -4,9 +4,8 @@
       <!-- AR сцена -->
       <a-scene 
         embedded 
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        arjs="sourceType: webcam; debugUIEnabled: false;"
         vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true;"
       >
         <!-- Маркер для QR-кода -->
         <a-marker 
@@ -58,25 +57,6 @@
                 scale="0.7 0.7 0.7"
               ></a-text>
             </a-entity>
-  
-            <!-- Последняя операция -->
-            <a-entity v-if="lastOperation" position="0 0.8 0.01">
-              <a-text 
-                :value="`📍 ${lastOperation.Place}`"
-                align="center"
-                color="#007AFF"
-                width="1.2"
-                scale="0.6 0.6 0.6"
-              ></a-text>
-              <a-text 
-                :value="formatDate(lastOperation.DateOperation)"
-                align="center"
-                color="#8E8E93"
-                position="0 -0.08 0"
-                width="1.0"
-                scale="0.5 0.5 0.5"
-              ></a-text>
-            </a-entity>
           </a-entity>
         </a-marker>
   
@@ -92,24 +72,17 @@
         
         <div v-else class="found-message">
           <h3>✅ Устройство распознано</h3>
-          <p>Двигайте камеру - информация следует за QR-кодом</p>
         </div>
   
         <button class="close-button" @click="closeAR">
           Закрыть AR
         </button>
       </div>
-  
-      <!-- Загрузка -->
-      <div v-if="loading" class="loading-overlay">
-        <div class="spinner"></div>
-        <p>Загрузка AR...</p>
-      </div>
     </div>
   </template>
   
   <script setup>
-  import { ref, onMounted, onUnmounted, computed } from 'vue'
+  import { ref, computed } from 'vue'
   
   const props = defineProps({
     scannedData: String,
@@ -118,7 +91,6 @@
   
   const emit = defineEmits(['close'])
   
-  const loading = ref(true)
   const markerVisible = ref(false)
   
   // Генерируем barcode value из scannedData
@@ -138,18 +110,6 @@
     return props.deviceData?.properties?.slice(0, 4) || []
   })
   
-  // Последняя операция
-  const lastOperation = computed(() => {
-    return props.deviceData?.operation_logs?.[0] || null
-  })
-  
-  onMounted(() => {
-    // Даем время на загрузку AR
-    setTimeout(() => {
-      loading.value = false
-    }, 2000)
-  })
-  
   const onMarkerFound = () => {
     console.log('Маркер найден!')
     markerVisible.value = true
@@ -158,20 +118,6 @@
   const onMarkerLost = () => {
     console.log('Маркер потерян')
     markerVisible.value = false
-  }
-  
-  const formatDate = (dateString) => {
-    if (!dateString) return ''
-    try {
-      const date = new Date(dateString)
-      return date.toLocaleDateString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      })
-    } catch {
-      return dateString
-    }
   }
   
   const closeAR = () => {
@@ -195,7 +141,6 @@
     height: 100%;
   }
   
-  /* Интерфейс поверх AR */
   .ar-ui {
     position: absolute;
     top: 0;
@@ -228,18 +173,6 @@
     backdrop-filter: blur(10px);
   }
   
-  .scanning-message p,
-  .found-message p {
-    margin: 0;
-    font-size: 14px;
-    color: #cccccc;
-    background: rgba(0, 0, 0, 0.5);
-    display: inline-block;
-    padding: 8px 16px;
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-  }
-  
   .close-button {
     position: absolute;
     bottom: 30px;
@@ -255,35 +188,5 @@
     font-size: 16px;
     font-weight: 600;
     backdrop-filter: blur(10px);
-  }
-  
-  .loading-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    z-index: 1000;
-  }
-  
-  .spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #007aff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 16px;
-  }
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
   }
   </style>
