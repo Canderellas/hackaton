@@ -9,10 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddDbContext<PostgresContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Регистрируем сервисы
 builder.Services.AddScoped<IDeviceService, DeviceService>();
 
 builder.Services.AddCors(options =>
