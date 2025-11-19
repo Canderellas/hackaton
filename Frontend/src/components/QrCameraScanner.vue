@@ -13,7 +13,7 @@ const showARView = ref(false)
 const showResultModal = ref(false)
 const deviceData = ref(null)
 const lastScannedData = ref('')
-const lastScannedLocation = ref(null) // ✅ Сохраняем позицию QR-кода
+const lastScannedLocation = ref(null)
 const isScanning = ref(false)
 
 // Функции
@@ -58,12 +58,10 @@ const fetchDeviceData = async (deviceId) => {
 }
 
 const extractDeviceId = (data) => {
-  // Пытаемся найти GUID в данных
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
     return data
   }
   
-  // Пытаемся извлечь из URL
   try {
     const url = new URL(data)
     const pathParts = url.pathname.split('/')
@@ -98,7 +96,7 @@ const scanNow = async () => {
   if (code) {
     drawGreenBorder(ctx, code.location)
     lastScannedData.value = code.data
-    lastScannedLocation.value = { // ✅ Сохраняем полную информацию о позиции
+    lastScannedLocation.value = {
       topLeft: { x: code.location.topLeftCorner.x, y: code.location.topLeftCorner.y },
       topRight: { x: code.location.topRightCorner.x, y: code.location.topRightCorner.y },
       bottomRight: { x: code.location.bottomRightCorner.x, y: code.location.bottomRightCorner.y },
@@ -106,9 +104,7 @@ const scanNow = async () => {
       center: {
         x: (code.location.topLeftCorner.x + code.location.bottomRightCorner.x) / 2,
         y: (code.location.topLeftCorner.y + code.location.bottomRightCorner.y) / 2
-      },
-      width: Math.abs(code.location.topRightCorner.x - code.location.topLeftCorner.x),
-      height: Math.abs(code.location.bottomLeftCorner.y - code.location.topLeftCorner.y)
+      }
     }
     
     errorMessage.value = ''
@@ -162,35 +158,12 @@ const retryScan = () => {
   errorMessage.value = 'Наведите камеру на QR-код и нажмите "Сканировать"'
 }
 
-// Автоматическое сканирование каждые 500ms (опционально)
-const autoScanInterval = ref(null)
-
-const startAutoScan = () => {
-  if (autoScanInterval.value) clearInterval(autoScanInterval.value)
-  autoScanInterval.value = setInterval(() => {
-    if (!showResultModal.value && !showARView.value) {
-      scanNow()
-    }
-  }, 500)
-}
-
-const stopAutoScan = () => {
-  if (autoScanInterval.value) {
-    clearInterval(autoScanInterval.value)
-    autoScanInterval.value = null
-  }
-}
-
 // Жизненный цикл
 onMounted(() => {
-  startCamera().then(() => {
-    // Запускаем автосканирование после успешной загрузки камеры
-    startAutoScan()
-  })
+  startCamera()
 })
 
 onUnmounted(() => {
-  stopAutoScan()
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop())
   }
@@ -216,7 +189,6 @@ onUnmounted(() => {
         <div class="frame-corner top-right"></div>
         <div class="frame-corner bottom-left"></div>
         <div class="frame-corner bottom-right"></div>
-        <div class="scanning-line" :class="{ scanning: !showResultModal && !showARView }"></div>
       </div>
       
       <div v-if="!stream" class="placeholder">
@@ -230,18 +202,11 @@ onUnmounted(() => {
       {{ errorMessage }}
     </div>
 
-    <!-- Кнопки управления -->
+    <!-- Кнопка сканирования -->
     <div class="controls">
       <button @click="scanNow" class="scan-button" :disabled="isScanning">
         <span v-if="isScanning">🔍 Сканирую...</span>
         <span v-else>📷 Сканировать QR-код</span>
-      </button>
-      
-      <button @click="startAutoScan" class="secondary-button" v-if="!autoScanInterval">
-        🔄 Включить автосканирование
-      </button>
-      <button @click="stopAutoScan" class="secondary-button" v-else>
-        ⏸️ Остановить автосканирование
       </button>
     </div>
 
@@ -272,17 +237,9 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-if="deviceData.operation_logs && deviceData.operation_logs.length > 0" class="logs">
-            <h4>Последняя операция:</h4>
-            <p class="log-entry">
-              {{ deviceData.operation_logs[0].action }} - 
-              {{ new Date(deviceData.operation_logs[0].timestamp).toLocaleDateString() }}
-            </p>
-          </div>
-
           <div class="action-buttons">
             <button @click="openAR" class="ar-button">
-              🚀 Открыть в AR режиме
+              🚀 Открыть в 3D просмотре
             </button>
             <button @click="retryScan" class="secondary-button">
               🔄 Сканировать другой код
@@ -407,38 +364,6 @@ onUnmounted(() => {
   right: -3px;
   border-left: none;
   border-top: none;
-}
-
-.scanning-line {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 3px;
-  background: #00ff00;
-  transform: translateY(-100%);
-  opacity: 0;
-}
-
-.scanning-line.scanning {
-  animation: scan 2s ease-in-out infinite;
-}
-
-@keyframes scan {
-  0% {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(400%);
-    opacity: 0;
-  }
 }
 
 .placeholder {
@@ -649,25 +574,6 @@ onUnmounted(() => {
   color: #666;
   text-align: right;
   word-break: break-word;
-}
-
-.logs {
-  margin-bottom: 24px;
-  padding: 16px;
-  background: #f8f8f8;
-  border-radius: 12px;
-}
-
-.logs h4 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  color: #1d1d1f;
-}
-
-.log-entry {
-  margin: 0;
-  color: #666;
-  font-size: 14px;
 }
 
 .action-buttons {
