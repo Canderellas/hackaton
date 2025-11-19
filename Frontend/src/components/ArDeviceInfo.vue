@@ -1,7 +1,7 @@
 <!-- src/components/ArDeviceInfo.vue -->
 <template>
     <div class="ar-container">
-      <!-- Всегда показываем интерфейс поверх AR -->
+      <!-- A-Frame сцена теперь будет занимать весь экран и показывать камеру -->
       <div class="ar-ui">
         <div v-if="!markerVisible" class="scanning-message">
           <h3>🔍 Наведите камеру на QR-код устройства</h3>
@@ -49,7 +49,6 @@
     if (!props.scannedData) return null
     
     try {
-      // Пытаемся найти GUID в строке
       const guidMatch = props.scannedData.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
       return guidMatch ? guidMatch[0] : props.scannedData
     } catch {
@@ -62,21 +61,20 @@
     const guid = extractedGuid.value
     if (!guid) {
       arStatus.value = 'GUID не найден'
-      return 100 // дефолтное значение
+      return 100
     }
     
     currentGuid.value = guid
     
     try {
-      // Создаем стабильный хэш из GUID
       let hash = 0
       for (let i = 0; i < guid.length; i++) {
         hash = ((hash << 5) - hash) + guid.charCodeAt(i)
-        hash |= 0 // Convert to 32bit integer
+        hash |= 0
       }
       
-      const value = Math.abs(hash) % 1024 // AR.js поддерживает 0-1023
-      arStatus.value = `GUID: ${guid.slice(0, 8)}... → Barcode: ${value}`
+      const value = Math.abs(hash) % 1024
+      arStatus.value = `AR ГОТОВ. Ищем QR-КОД C barcode: ${value}`
       return value
       
     } catch (error) {
@@ -94,7 +92,7 @@
   })
   
   const initializeAR = () => {
-    // Даем время на вычисления перед созданием сцены
+    // Ждем вычисления barcode value
     setTimeout(() => {
       createARScene()
     }, 100)
@@ -102,12 +100,29 @@
   
   const createARScene = () => {
     try {
-      // Создаем элемент сцены
+      // Очищаем контейнер перед созданием новой сцены
+      const container = document.querySelector('.ar-container')
+      if (container) {
+        container.innerHTML = '<div class="ar-ui"></div>'
+      }
+  
+      // Создаем элемент сцены с правильными настройками
       const sceneElement = document.createElement('a-scene')
       sceneElement.setAttribute('embedded', 'true')
       sceneElement.setAttribute('vr-mode-ui', 'enabled: false')
-      sceneElement.setAttribute('renderer', 'antialias: true; alpha: true')
+      sceneElement.setAttribute('renderer', 'antialias: true; alpha: true; precision: medium;')
       sceneElement.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;')
+      
+      // ✅ ДОБАВЛЯЕМ: Создаем видеопоток как фон сцены
+      const cameraBackground = document.createElement('a-entity')
+      cameraBackground.setAttribute('camera', '')
+      cameraBackground.setAttribute('position', '0 0 0')
+      
+      // ✅ ВАЖНО: Добавляем компонент arjs-video для отображения видеопотока
+      const videoBackground = document.createElement('a-entity')
+      videoBackground.setAttribute('arjs-video', '')
+      videoBackground.setAttribute('position', '0 0 0')
+      videoBackground.setAttribute('visible', 'true')
       
       // Создаем маркер с вычисленным barcode value
       const markerElement = document.createElement('a-marker')
@@ -165,7 +180,7 @@
         
         props.deviceData.properties.slice(0, 4).forEach((prop, index) => {
           const propElement = document.createElement('a-text')
-          const displayText = `${prop.Name}: ${prop.Value}`.substring(0, 25) // Ограничиваем длину
+          const displayText = `${prop.Name}: ${prop.Value}`.substring(0, 25)
           propElement.setAttribute('value', displayText)
           propElement.setAttribute('align', 'left')
           propElement.setAttribute('color', '#000000')
@@ -187,18 +202,16 @@
       
       markerElement.appendChild(contentElement)
       
-      // Создаем камеру
-      const cameraElement = document.createElement('a-entity')
-      cameraElement.setAttribute('camera', '')
-      
-      // Собираем сцену
-      sceneElement.appendChild(markerElement)
-      sceneElement.appendChild(cameraElement)
+      // ✅ ВАЖНО: Правильно собираем сцену
+      sceneElement.appendChild(videoBackground) // Сначала видеопоток
+      sceneElement.appendChild(cameraBackground) // Затем камеру
+      sceneElement.appendChild(markerElement)    // Затем маркер
       
       // Добавляем на страницу
-      const container = document.querySelector('.ar-container')
-      if (container) {
-        container.appendChild(sceneElement)
+      const arContainer = document.querySelector('.ar-container')
+      if (arContainer) {
+        // Вставляем сцену ПЕРЕД интерфейсом
+        arContainer.insertBefore(sceneElement, arContainer.querySelector('.ar-ui'))
       }
       
       // Сохраняем ссылку для очистки
@@ -216,8 +229,6 @@
         markerVisible.value = false
         arStatus.value = 'Поиск QR-кода устройства...'
       })
-      
-      arStatus.value = `AR готов. Ищем QR-код с barcode: ${barcodeValue.value}`
       
       console.log('AR сцена создана с barcode value:', barcodeValue.value)
       
@@ -252,7 +263,7 @@
     z-index: 1000;
   }
   
-  /* AR сцена займет весь контейнер */
+  /* A-Frame сцена занимает весь контейнер */
   .ar-container ::v-deep(a-scene) {
     width: 100%;
     height: 100%;
@@ -273,6 +284,7 @@
     z-index: 2;
   }
   
+  /* Остальные стили остаются без изменений */
   .scanning-message,
   .found-message {
     position: absolute;
@@ -357,7 +369,6 @@
     transform: translateX(-50%) scale(1.05);
   }
   
-  /* Адаптивность */
   @media (max-width: 768px) {
     .scanning-message h3,
     .found-message h3 {
