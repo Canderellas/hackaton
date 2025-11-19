@@ -1,16 +1,19 @@
-<!-- QrCameraScannerFixed.vue -->
+<!-- QrCameraScanner.vue -->
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import jsQR from 'jsqr'
 import QrResultModal from './QrResultModal.vue'
+import ArDeviceInfo from './ArDeviceInfo.vue' // ← ДОБАВИТЬ ИМПОРТ
 
 const video = ref(null)
 const canvas = ref(null)
 const stream = ref(null)
 const errorMessage = ref('')
 const showResultModal = ref(false)
+const showARView = ref(false) // ← ДОБАВИТЬ НОВУЮ ПЕРЕМЕННУЮ
 const lastScannedData = ref('')
 const lastFrameImage = ref('')
+const deviceData = ref(null) // ← ДОБАВИТЬ ДЛЯ ХРАНЕНИЯ ДАННЫХ
 
 onMounted(async () => {
   try {
@@ -31,7 +34,49 @@ onUnmounted(() => {
   if (stream.value) stream.value.getTracks().forEach(t => t.stop())
 })
 
-const scanNow = () => {
+// Функция для загрузки данных устройства
+const fetchDeviceData = async (deviceId) => {
+  try {
+    const response = await fetch(`https://comunada.store/api/device/${deviceId}`)
+    
+    if (response.status === 404) {
+      errorMessage.value = 'Устройство не найдено'
+      return null
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Ошибка сервера: ${response.status}`)
+    }
+    
+    return await response.json()
+  } catch (err) {
+    console.error('Ошибка при загрузке данных:', err)
+    errorMessage.value = 'Ошибка при загрузке данных устройства'
+    return null
+  }
+}
+
+// Функция извлечения ID из QR-кода
+const extractDeviceId = (data) => {
+  // Если это прямой GUID
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    return data
+  }
+  
+  // Если это URL, пытаемся извлечь ID из пути
+  try {
+    const url = new URL(data)
+    const pathParts = url.pathname.split('/')
+    const id = pathParts.find(part => 
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(part)
+    )
+    return id || data
+  } catch {
+    return data
+  }
+}
+
+const scanNow = async () => { // ← СДЕЛАТЬ ASYNC
   if (!video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
     errorMessage.value = 'Камера ещё не готова'
     return
@@ -51,8 +96,16 @@ const scanNow = () => {
     drawGreenBorder(ctx, code.location)
     lastFrameImage.value = canvas.value.toDataURL('image/png')
     lastScannedData.value = code.data
-    showResultModal.value = true
     errorMessage.value = ''
+    
+    // ЗАМЕНИТЬ ПОКАЗ МОДАЛКИ НА ЗАГРУЗКУ ДАННЫХ
+    const deviceId = extractDeviceId(code.data)
+    const data = await fetchDeviceData(deviceId)
+    
+    if (data) {
+      deviceData.value = data
+      showARView.value = true // ← ПОКАЗЫВАЕМ AR ВМЕСТО МОДАЛКИ
+    }
   } else {
     errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
   }
@@ -72,6 +125,11 @@ const drawGreenBorder = (ctx, location) => {
 
 const closeModal = () => {
   showResultModal.value = false
+}
+
+const closeAR = () => { // ← ДОБАВИТЬ ФУНКЦИЮ ЗАКРЫТИЯ AR
+  showARView.value = false
+  deviceData.value = null
 }
 </script>
 
@@ -94,9 +152,16 @@ const closeModal = () => {
       Сканировать QR-код
     </button>
 
-    <!-- Модалка с результатом -->
+    <!-- АР-режим вместо модалки -->
+    <ArDeviceInfo
+      v-if="showARView"
+      :device-data="deviceData"
+      @close="closeAR"
+    />
+
+    <!-- Старая модалка (можно оставить как fallback) -->
     <QrResultModal
-      v-if="showResultModal"
+      v-if="showResultModal && !showARView"
       :scanned-data="lastScannedData"
       :frame-image="lastFrameImage"
       @close="closeModal"
@@ -105,11 +170,11 @@ const closeModal = () => {
 </template>
 
 <style scoped>
-/* Главный контейнер — весь экран без прокрутки */
+/* Стили остаются без изменений */
 .app {
   position: fixed;
   inset: 0;
-  background: #000;                     /* чёрный фон как на твоём скриншоте */
+  background: #000;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -120,7 +185,6 @@ const closeModal = () => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* Квадрат камеры — строго 1:1, максимум 90% ширины экрана */
 .camera-wrapper {
   position: relative;
   width: 90vw;
@@ -151,7 +215,6 @@ const closeModal = () => {
   padding: 20px;
 }
 
-/* Красное сообщение — как на скриншоте */
 .error-message {
   background: #ff3b30;
   color: white;
@@ -164,7 +227,6 @@ const closeModal = () => {
   box-shadow: 0 8px 25px rgba(255, 59, 48, 0.3);
 }
 
-/* Кнопка — точно как у тебя на фото */
 .scan-button {
   background: #000;
   color: white;
