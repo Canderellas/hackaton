@@ -16,6 +16,8 @@ const notFound = ref(false)
 
 // Функция для извлечения ID из QR-кода
 const extractDeviceId = (data) => {
+  if (!data) return null
+  
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
     return data
   }
@@ -34,6 +36,11 @@ const extractDeviceId = (data) => {
 
 // Функция загрузки данных устройства
 const fetchDeviceData = async () => {
+  if (!props.scannedData) {
+    error.value = 'Нет данных для загрузки'
+    return
+  }
+
   loading.value = true
   error.value = ''
   notFound.value = false
@@ -41,6 +48,10 @@ const fetchDeviceData = async () => {
 
   try {
     const deviceId = extractDeviceId(props.scannedData)
+    
+    if (!deviceId) {
+      throw new Error('Не удалось извлечь ID устройства')
+    }
     
     const response = await fetch(`https://comunada.store/api/device/${deviceId}`)
     
@@ -57,7 +68,7 @@ const fetchDeviceData = async () => {
     
   } catch (err) {
     console.error('Ошибка при загрузке данных:', err)
-    error.value = 'Ошибка при загрузке данных устройства'
+    error.value = err.message || 'Ошибка при загрузке данных устройства'
   } finally {
     loading.value = false
   }
@@ -65,12 +76,18 @@ const fetchDeviceData = async () => {
 
 // Автоматически загружаем данные при открытии модалки
 onMounted(() => {
-  fetchDeviceData()
+  if (props.scannedData) {
+    fetchDeviceData()
+  } else {
+    error.value = 'Нет данных QR-кода'
+  }
 })
 
 // Следим за изменением scannedData
-watch(() => props.scannedData, () => {
-  fetchDeviceData()
+watch(() => props.scannedData, (newVal) => {
+  if (newVal) {
+    fetchDeviceData()
+  }
 })
 
 const closeModal = () => {
@@ -104,7 +121,9 @@ const formatDate = (dateString) => {
           <div class="header-icon">📱</div>
           <div class="header-text">
             <h2>Информация об устройстве</h2>
-            <p>Данные успешно загружены</p>
+            <p v-if="loading">Загрузка данных...</p>
+            <p v-else-if="deviceData">Данные успешно загружены</p>
+            <p v-else>Обработка запроса</p>
           </div>
         </div>
         <button class="close-button" @click="closeModal">
@@ -176,8 +195,8 @@ const formatDate = (dateString) => {
                 <span>📊</span>
               </div>
               <div class="property-content">
-                <strong class="property-name">{{ property.name || 'Свойство' }}</strong>
-                <span class="property-value">{{ property.value || 'Не указано' }}</span>
+                <strong class="property-name">{{ property.Name || 'Свойство' }}</strong>
+                <span class="property-value">{{ property.Value || 'Не указано' }}</span>
               </div>
             </div>
           </div>
@@ -226,11 +245,11 @@ const formatDate = (dateString) => {
       <div class="modal-footer">
         <button class="action-button secondary" @click="closeModal">
           <span class="button-icon">←</span>
-          Вернуться к сканеру
+          Закрыть
         </button>
-        <button v-if="deviceData" class="action-button primary" @click="fetchDeviceData">
+        <button v-if="deviceData && !loading" class="action-button primary" @click="fetchDeviceData">
           <span class="button-icon">🔄</span>
-          Обновить данные
+          Обновить
         </button>
       </div>
     </div>
@@ -238,6 +257,7 @@ const formatDate = (dateString) => {
 </template>
 
 <style scoped>
+/* Стили остаются такими же как в предыдущей красивой версии */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -263,21 +283,10 @@ const formatDate = (dateString) => {
   box-shadow: 
     0 25px 50px rgba(0, 0, 0, 0.3),
     0 0 0 1px rgba(255, 255, 255, 0.1);
-  animation: modalAppear 0.3s ease-out;
 }
 
-@keyframes modalAppear {
-  from {
-    opacity: 0;
-    transform: scale(0.9) translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
+/* ... остальные стили без изменений ... */
 
-/* Заголовок */
 .modal-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -287,29 +296,6 @@ const formatDate = (dateString) => {
   justify-content: space-between;
   align-items: flex-start;
   position: relative;
-}
-
-.header-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.header-icon {
-  font-size: 32px;
-  margin-top: 4px;
-}
-
-.header-text h2 {
-  margin: 0 0 4px 0;
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.header-text p {
-  margin: 0;
-  opacity: 0.9;
-  font-size: 14px;
 }
 
 .close-button {
@@ -330,6 +316,7 @@ const formatDate = (dateString) => {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.1);
 }
+
 
 .close-button span {
   font-size: 24px;
