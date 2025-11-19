@@ -1,16 +1,16 @@
 services:
-  # nginx прокси (отдельный сервис)
+  # nginx прокси с SSL
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
-      - "443:443"
+      - "443:443"  # ← добавляем порт 443
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      - ./Frontend/dist:/usr/share/nginx/html:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro  # ← SSL сертификаты
+      - ./frontend-dist:/usr/share/nginx/html:ro
     depends_on:
-      - backend
+      - frontend-builder
     restart: unless-stopped
 
   # ASP.NET Core Backend
@@ -24,9 +24,15 @@ services:
       - ASPNETCORE_URLS=http://+:5000
     restart: unless-stopped
 
-  # Vue.js Frontend (только сборка)
-  frontend:
+  # Frontend builder
+  frontend-builder:
     build:
       context: ./Frontend
       dockerfile: Dockerfile
+    volumes:
+      - frontend-dist:/app/dist
+    command: sh -c "npm run build && tail -f /dev/null"
     restart: unless-stopped
+
+volumes:
+  frontend-dist:
