@@ -1,4 +1,18 @@
 services:
+  # nginx прокси (отдельный сервис)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./Frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
   # ASP.NET Core Backend
   backend:
     build: 
@@ -8,22 +22,11 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=localhost;Database=Hackaton;Username=postgres;Password=12345678
       - ASPNETCORE_URLS=http://+:5000
-    ports:
-      - "5000:5000"
     restart: unless-stopped
 
-  # Vue.js Frontend
+  # Vue.js Frontend (только сборка)
   frontend:
     build:
       context: ./Frontend
       dockerfile: Dockerfile
-    environment:
-      - VITE_API_URL=https://comunada.store/api
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-    extra_hosts:
-      - "comunada.store:host-gateway"
     restart: unless-stopped
