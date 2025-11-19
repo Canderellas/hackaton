@@ -1,6 +1,7 @@
 ﻿using Backend_hackaton.Models;
 using Backend_hackaton.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using System.Linq;
 
 namespace Backend_hackaton.Services
@@ -17,7 +18,7 @@ namespace Backend_hackaton.Services
             Guid? searchId = null;
             try
             {
-               searchId = Guid.Parse(deviceId);
+                searchId = Guid.Parse(deviceId);
             }
             catch
             {
@@ -30,6 +31,9 @@ namespace Backend_hackaton.Services
             .Include(c => c.DevicePropertyValues)
                 .ThenInclude(b => b.FkModelPropertyNavigation)
                     .ThenInclude(d => d.FkPropertyNavigation)
+            .Include(c => c.DevicePropertyValues)
+                .ThenInclude(c => c.DeviceStyleValues)
+                    .ThenInclude(c => c.FkStylePropertyNavigation)
             .FirstOrDefaultAsync(d => d.Id == searchId);
             if (device != null)
             {
@@ -45,21 +49,26 @@ namespace Backend_hackaton.Services
             return new DeviceResponse
             {
                 Id = device.Id.ToString(),
-                Name_model = device.FkModelNavigation.Name ?? "",
-                Name_type = device.FkModelNavigation.FkTypeNavigation.Name ?? "",
-                Description_model = device.FkModelNavigation.Description ?? "",
-                Description_type = device.FkModelNavigation.FkTypeNavigation.Description ?? "",
-                Operation_logs = device.OperationalLogs.Select(op => new OperationLogDTO
+                Name_model = device.FkModelNavigation?.Name ?? "",
+                Name_type = device.FkModelNavigation?.FkTypeNavigation?.Name ?? "",
+                Description_model = device.FkModelNavigation?.Description ?? "",
+                Description_type = device.FkModelNavigation?.FkTypeNavigation?.Description ?? "",
+                Operation_logs = device.OperationalLogs?.Select(op => new OperationLogDTO
                 {
-                    Place = op.Place,
+                    Place = op.Place ?? "",
                     Date = op.DateOperation,
-                    Comment = op.Comment
-                }).ToList(),
+                    Comment = op.Comment ?? ""
+                }).ToList() ?? new List<OperationLogDTO>(),
                 Properties = device.DevicePropertyValues?.Select(pv => new PropertyDTO
                 {
-                    Name = pv.FkModelPropertyNavigation.FkPropertyNavigation.Name,
-                    Value = pv.Value
-                }).ToList()
+                    Name = pv.FkModelPropertyNavigation?.FkPropertyNavigation?.Name ?? "Unknown Property",
+                    Value = pv.Value ?? "",
+                    Styles = pv.DeviceStyleValues.Select(style => new StyleDTO
+                    {
+                        Name = style.FkStylePropertyNavigation?.Name ?? "unknown-style",
+                        Value = style.Value ?? ""
+                    }).ToList() ?? new List<StyleDTO>()
+                }).ToList() ?? new List<PropertyDTO>()
             };
         }
     }
