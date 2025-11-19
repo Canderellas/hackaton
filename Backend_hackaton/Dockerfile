@@ -20,8 +20,9 @@ RUN dotnet build "Backend_hackaton.sln" -c Release --no-restore -o /app/build
 # ��������� ����������
 RUN dotnet publish "Backend_hackaton.sln" -c Release --no-restore --no-build -o /app/publish
 
-# ��������� �����
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 
 # ������������� ������� ����������
 WORKDIR /app
