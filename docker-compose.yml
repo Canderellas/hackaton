@@ -1,18 +1,18 @@
 services:
+  # ASP.NET Core Backend
   backend:
     build: 
       context: ./Backend_hackaton
       dockerfile: Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Host=your-postgres-container-name;Database=Hackaton;Username=postgres;Password=12345678
+      - ConnectionStrings__DefaultConnection=Host=localhost;Database=Hackaton;Username=postgres;Password=12345678
       - ASPNETCORE_URLS=http://+:5000
     ports:
       - "5000:5000"
-    networks:
-      - app-network
     restart: unless-stopped
 
+  # Vue.js Frontend
   frontend:
     build:
       context: ./Frontend
@@ -24,11 +24,6 @@ services:
       - "443:443"
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      - backend
+    extra_hosts:
+      - "comunada.store:host-gateway"
     restart: unless-stopped
-
-networks:
-  app-network:
-    external: true
-    name: bridge  # или имя сети где запущен PostgreSQL
