@@ -252,8 +252,6 @@ onUnmounted(() => {
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 20px;
   position: relative;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
 }
 
 /* Уголки рамки */
