@@ -74,6 +74,21 @@ const fetchDeviceData = async () => {
   }
 }
 
+// Функция для преобразования стилей в объект CSS
+const getStyleObject = (styles) => {
+  if (!styles || !Array.isArray(styles)) return {};
+  
+  const styleObject = {};
+  styles.forEach(style => {
+    if (style.name && style.value) {
+      // Преобразуем kebab-case в camelCase для Vue
+      const camelCaseName = style.name.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+      styleObject[camelCaseName] = style.value;
+    }
+  });
+  return styleObject;
+}
+
 // Автоматически загружаем данные при открытии модалки
 onMounted(() => {
   if (props.scannedData) {
@@ -189,6 +204,7 @@ const formatDate = (dateString) => {
               v-for="(property, index) in deviceData.properties" 
               :key="index" 
               class="property-card"
+              :style="getStyleObject(property.styles)"
             >
               <div class="property-content">
                 <strong class="property-name">{{ property.name || 'Свойство' }}</strong>
@@ -312,7 +328,6 @@ const formatDate = (dateString) => {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.1);
 }
-
 
 .close-button span {
   font-size: 24px;
