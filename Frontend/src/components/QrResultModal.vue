@@ -322,6 +322,9 @@ const formatDate = (dateString) => {
   cursor: pointer;
   transition: all 0.2s;
   backdrop-filter: blur(10px);
+  position: absolute; 
+  top: 20px; 
+  right: 20px; 
 }
 
 .close-button:hover {
