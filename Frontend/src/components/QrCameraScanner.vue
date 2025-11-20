@@ -19,13 +19,8 @@ const startCamera = async () => {
     stream.value = await navigator.mediaDevices.getUserMedia({
       video: { 
         facingMode: 'environment',
-        // Оптимальные настройки для сканирования QR-кодов
-        width: { ideal: 1920, max: 3840 },
-        height: { ideal: 1080, max: 2160 },
-        aspectRatio: { ideal: 1.777 }, // 16:9
-        frameRate: { ideal: 60, min: 30 }, // Высокая частота кадров
-        focusMode: 'continuous', // Непрерывная автофокусировка
-        resizeMode: 'crop-and-scale' // Оптимизация размера
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       }
     })
     
