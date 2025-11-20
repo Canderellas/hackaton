@@ -36,28 +36,62 @@ const startCamera = async () => {
   }
 }
 
-const scanNow = () => {
-  if (!cameraReady.value) {
-    errorMessage.value = 'Камера ещё не готова'
-    return
-  }
 
-  if (!video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
-    errorMessage.value = 'Видео не готово'
-    return
+const scanNow = () => {
+  if (!cameraReady.value || !video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
+    errorMessage.value = 'Камера ещё не готова'
   }
 
   isScanning.value = true
 
-  const ctx = canvas.value.getContext('2d')
+  const ctx = canvas.value.getContext('2d', { willReadFrequently: true })
   canvas.value.width = video.value.videoWidth
   canvas.value.height = video.value.videoHeight
+  
+  // Рисуем текущий кадр
   ctx.drawImage(video.value, 0, 0, canvas.value.width, canvas.value.height)
 
   const imageData = ctx.getImageData(0, 0, canvas.value.width, canvas.value.height)
-  const code = jsQR(imageData.data, imageData.width, imageData.height, {
-    inversionAttempts: 'dontInvert'
+  
+  // Пробуем несколько стратегий сканирования
+  let code = null
+  
+  // Стратегия 1: Обычное сканирование с улучшенными параметрами
+  code = jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: 'dontInvert',
+    // Более чувствительные настройки
   })
+  
+  if (!code) {
+    // Стратегия 2: С инверсией
+    code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'onlyInvert',
+    })
+  }
+  
+  if (!code) {
+    // Стратегия 3: С увеличенной контрастностью
+    const contrastedData = enhanceImage(imageData.data, canvas.value.width, canvas.value.height)
+    code = jsQR(contrastedData, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth',
+    })
+  }
+  
+  if (!code) {
+    // Стратегия 4: Обрезаем до центральной области (где скорее всего QR-код)
+    const croppedData = cropToCenter(imageData, 0.7) // 70% от центра
+    code = jsQR(croppedData.data, croppedData.width, croppedData.height, {
+      inversionAttempts: 'attemptBoth',
+    })
+  }
+  
+  if (!code) {
+    // Стратегия 5: Черно-белое изображение с пороговой обработкой
+    const bwData = convertToBlackWhite(imageData.data)
+    code = jsQR(bwData, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth',
+    })
+  }
 
   if (code) {
     drawGreenBorder(ctx, code.location)
@@ -65,11 +99,112 @@ const scanNow = () => {
     lastScannedData.value = code.data
     showResultModal.value = true
     errorMessage.value = ''
+    if (autoScan.value) {
+      stopAutoScan()
+    }
   } else {
-    errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
+    if (!autoScan.value) {
+      errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
+    }
   }
 
   isScanning.value = false
+}
+
+// Функция для улучшения контрастности и резкости
+const enhanceImage = (imageData, width, height) => {
+  const newData = new Uint8ClampedArray(imageData.length)
+  const contrast = 1.3 // Увеличиваем контрастность
+  const brightness = 10 // Небольшая яркость
+  
+  for (let i = 0; i < imageData.length; i += 4) {
+    // Применяем контрастность и яркость
+    newData[i] = Math.min(255, Math.max(0, (imageData[i] - 128) * contrast + 128 + brightness))
+    newData[i + 1] = Math.min(255, Math.max(0, (imageData[i + 1] - 128) * contrast + 128 + brightness))
+    newData[i + 2] = Math.min(255, Math.max(0, (imageData[i + 2] - 128) * contrast + 128 + brightness))
+    newData[i + 3] = imageData[i + 3]
+  }
+  
+  return newData
+}
+
+// Функция для обрезки до центральной области
+const cropToCenter = (imageData, cropFactor = 0.7) => {
+  const cropWidth = Math.floor(imageData.width * cropFactor)
+  const cropHeight = Math.floor(imageData.height * cropFactor)
+  const startX = Math.floor((imageData.width - cropWidth) / 2)
+  const startY = Math.floor((imageData.height - cropHeight) / 2)
+  
+  const croppedData = new Uint8ClampedArray(cropWidth * cropHeight * 4)
+  
+  for (let y = 0; y < cropHeight; y++) {
+    for (let x = 0; x < cropWidth; x++) {
+      const sourceIndex = ((startY + y) * imageData.width + (startX + x)) * 4
+      const targetIndex = (y * cropWidth + x) * 4
+      
+      croppedData[targetIndex] = imageData.data[sourceIndex]
+      croppedData[targetIndex + 1] = imageData.data[sourceIndex + 1]
+      croppedData[targetIndex + 2] = imageData.data[sourceIndex + 2]
+      croppedData[targetIndex + 3] = imageData.data[sourceIndex + 3]
+    }
+  }
+  
+  return {
+    data: croppedData,
+    width: cropWidth,
+    height: cropHeight
+  }
+}
+
+// Функция для преобразования в черно-белое с порогом
+const convertToBlackWhite = (imageData) => {
+  const newData = new Uint8ClampedArray(imageData.length)
+  const threshold = 128 // Порог для черно-белого
+  
+  for (let i = 0; i < imageData.length; i += 4) {
+    // Вычисляем яркость пикселя
+    const brightness = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3
+    
+    // Преобразуем в черно-белое по порогу
+    const value = brightness > threshold ? 255 : 0
+    
+    newData[i] = value     // R
+    newData[i + 1] = value // G
+    newData[i + 2] = value // B
+    newData[i + 3] = imageData[i + 3] // Alpha
+  }
+  
+  return newData
+}
+
+// Альтернативная функция с резкостью
+const sharpenImage = (imageData) => {
+  const newData = new Uint8ClampedArray(imageData.length)
+  const kernel = [
+    [0, -1, 0],
+    [-1, 5, -1],
+    [0, -1, 0]
+  ]
+  
+  for (let y = 1; y < imageData.height - 1; y++) {
+    for (let x = 1; x < imageData.width - 1; x++) {
+      for (let c = 0; c < 3; c++) { // RGB каналы
+        let sum = 0
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const pixelIndex = ((y + ky) * imageData.width + (x + kx)) * 4 + c
+            const kernelValue = kernel[ky + 1][kx + 1]
+            sum += imageData.data[pixelIndex] * kernelValue
+          }
+        }
+        const newIndex = (y * imageData.width + x) * 4 + c
+        newData[newIndex] = Math.min(255, Math.max(0, sum))
+      }
+      newData[(y * imageData.width + x) * 4 + 3] = 255 // Alpha
+    }
+  }
+  
+  return newData
 }
 
 const drawGreenBorder = (ctx, location) => {
