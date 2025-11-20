@@ -36,8 +36,42 @@ const startCamera = async () => {
   }
 }
 
-
 const scanNow = () => {
+  if (!cameraReady.value) {
+    errorMessage.value = 'Камера ещё не готова'
+    return
+  }
+
+  if (!video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
+    errorMessage.value = 'Видео не готово'
+    return
+  }
+
+  isScanning.value = true
+
+  const ctx = canvas.value.getContext('2d')
+  canvas.value.width = video.value.videoWidth
+  canvas.value.height = video.value.videoHeight
+  ctx.drawImage(video.value, 0, 0, canvas.value.width, canvas.value.height)
+
+  const imageData = ctx.getImageData(0, 0, canvas.value.width, canvas.value.height)
+  const code = jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: 'dontInvert'
+  })
+
+  if (code) {
+    drawGreenBorder(ctx, code.location)
+    lastFrameImage.value = canvas.value.toDataURL('image/png')
+    lastScannedData.value = code.data
+    showResultModal.value = true
+    errorMessage.value = ''
+  } else {
+    errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
+  }
+
+  isScanning.value = false
+}
+const scanFrame = () => {
   if (!cameraReady.value || !video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
     return
   }
@@ -53,10 +87,45 @@ const scanNow = () => {
 
   const imageData = ctx.getImageData(0, 0, canvas.value.width, canvas.value.height)
   
-  // Только одна стратегия - быстрое сканирование
-  const code = jsQR(imageData.data, imageData.width, imageData.height, {
-    inversionAttempts: 'attemptBoth' // Пробуем оба варианта инверсии
+  // Пробуем несколько стратегий сканирования
+  let code = null
+  
+  // Стратегия 1: Обычное сканирование с улучшенными параметрами
+  code = jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: 'dontInvert',
+    // Более чувствительные настройки
   })
+  
+  if (!code) {
+    // Стратегия 2: С инверсией
+    code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'onlyInvert',
+    })
+  }
+  
+  if (!code) {
+    // Стратегия 3: С увеличенной контрастностью
+    const contrastedData = enhanceImage(imageData.data, canvas.value.width, canvas.value.height)
+    code = jsQR(contrastedData, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth',
+    })
+  }
+  
+  if (!code) {
+    // Стратегия 4: Обрезаем до центральной области (где скорее всего QR-код)
+    const croppedData = cropToCenter(imageData, 0.7) // 70% от центра
+    code = jsQR(croppedData.data, croppedData.width, croppedData.height, {
+      inversionAttempts: 'attemptBoth',
+    })
+  }
+  
+  if (!code) {
+    // Стратегия 5: Черно-белое изображение с пороговой обработкой
+    const bwData = convertToBlackWhite(imageData.data)
+    code = jsQR(bwData, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth',
+    })
+  }
 
   if (code) {
     drawGreenBorder(ctx, code.location)
@@ -75,6 +144,7 @@ const scanNow = () => {
 
   isScanning.value = false
 }
+
 // Функция для улучшения контрастности и резкости
 const enhanceImage = (imageData, width, height) => {
   const newData = new Uint8ClampedArray(imageData.length)
