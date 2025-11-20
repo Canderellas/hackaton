@@ -9,5 +9,7 @@ namespace Backend_hackaton.Models.DTOs
 
         [JsonPropertyName("value")]
         public string Value { get; set; } = string.Empty;
+        [JsonPropertyName("styles")]
+        public List<StyleDTO> Styles { get; set; } = new List<StyleDTO>();
     }
 }
