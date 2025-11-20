@@ -13,7 +13,6 @@ const lastScannedData = ref('')
 const lastFrameImage = ref('')
 const cameraReady = ref(false)
 const isScanning = ref(false)
-const scanInterval = ref(null)
 
 const startCamera = async () => {
   try {
@@ -30,7 +29,6 @@ const startCamera = async () => {
       await video.value.play()
       cameraReady.value = true
       errorMessage.value = ''
-      startContinuousScanning()
     }
   } catch (err) {
     errorMessage.value = 'Нет доступа к камере. Разрешите доступ к камере в настройках браузера.'
@@ -38,17 +36,14 @@ const startCamera = async () => {
   }
 }
 
-const startContinuousScanning = () => {
-  // Автоматическое сканирование каждые 500ms
-  scanInterval.value = setInterval(() => {
-    if (!isScanning.value && cameraReady.value && !showResultModal.value) {
-      scanFrame()
-    }
-  }, 500)
-}
+const scanNow = () => {
+  if (!cameraReady.value) {
+    errorMessage.value = 'Камера ещё не готова'
+    return
+  }
 
-const scanFrame = () => {
-  if (!cameraReady.value || !video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
+  if (!video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
+    errorMessage.value = 'Видео не готово'
     return
   }
 
@@ -70,18 +65,11 @@ const scanFrame = () => {
     lastScannedData.value = code.data
     showResultModal.value = true
     errorMessage.value = ''
-    // Останавливаем сканирование при успешном распознавании
-    stopContinuousScanning()
+  } else {
+    errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
   }
 
   isScanning.value = false
-}
-
-const stopContinuousScanning = () => {
-  if (scanInterval.value) {
-    clearInterval(scanInterval.value)
-    scanInterval.value = null
-  }
 }
 
 const drawGreenBorder = (ctx, location) => {
@@ -100,14 +88,9 @@ const closeModal = () => {
   showResultModal.value = false
   lastScannedData.value = ''
   lastFrameImage.value = ''
-  // Возобновляем сканирование после закрытия модалки
-  if (cameraReady.value) {
-    startContinuousScanning()
-  }
 }
 
 const closeScanner = () => {
-  stopContinuousScanning()
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop())
   }
@@ -148,9 +131,6 @@ onUnmounted(() => {
           <div class="frame-corner top-right"></div>
           <div class="frame-corner bottom-left"></div>
           <div class="frame-corner bottom-right"></div>
-          
-          <!-- Анимированная линия сканирования -->
-          <div class="scan-line"></div>
         </div>
         
         <div class="scan-instruction">
@@ -175,17 +155,22 @@ onUnmounted(() => {
       {{ errorMessage }}
     </div>
 
+    <!-- Кнопка сканирования -->
+    <button 
+      @click="scanNow" 
+      class="scan-button"
+      :disabled="!cameraReady || isScanning"
+    >
+      <span v-if="isScanning">🔍 Сканирование...</span>
+      <span v-else-if="!cameraReady">⏳ Подготовка...</span>
+      <span v-else>📷 Сканировать QR-код</span>
+    </button>
+
     <!-- Кнопка закрытия -->
     <button @click="closeScanner" class="close-button">
       <span class="button-icon">✕</span>
       Закрыть сканер
     </button>
-
-    <!-- Статус сканирования -->
-    <div v-if="cameraReady && !showResultModal" class="scan-status">
-      <span class="status-icon">🔍</span>
-      <span>Сканирование...</span>
-    </div>
 
     <!-- Модалка с результатом -->
     <QrResultModal
@@ -311,34 +296,6 @@ onUnmounted(() => {
   border-radius: 0 0 12px 0;
 }
 
-/* Анимированная линия сканирования */
-.scan-line {
-  position: absolute;
-  top: 10%;
-  left: 5%;
-  right: 5%;
-  height: 3px;
-  background: linear-gradient(90deg, 
-    transparent 0%, 
-    #667eea 50%, 
-    transparent 100%);
-  animation: scan 2s linear infinite;
-  border-radius: 3px;
-  box-shadow: 0 0 10px rgba(102, 126, 234, 0.8);
-}
-
-@keyframes scan {
-  0% {
-    top: 10%;
-  }
-  50% {
-    top: 90%;
-  }
-  100% {
-    top: 10%;
-  }
-}
-
 .scan-instruction {
   margin-top: 30px;
   text-align: center;
@@ -396,6 +353,37 @@ onUnmounted(() => {
   box-shadow: 0 8px 25px rgba(255, 59, 48, 0.3);
 }
 
+.scan-button {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 18px 40px;
+  border-radius: 50px;
+  font-size: 19px;
+  font-weight: bold;
+  cursor: pointer;
+  min-width: 280px;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+  transition: all 0.2s;
+}
+
+.scan-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #666;
+}
+
+.scan-button:not(:disabled):hover {
+  background: #5a6fd8;
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px rgba(102, 126, 234, 0.5);
+}
+
+.scan-button:not(:disabled):active {
+  transform: scale(0.95);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+}
+
 .close-button {
   display: flex;
   align-items: center;
@@ -421,22 +409,6 @@ onUnmounted(() => {
   font-size: 16px;
 }
 
-.scan-status {
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.status-icon {
-  font-size: 18px;
-}
-
 /* Адаптивность */
 @media (max-width: 480px) {
   .scan-frame {
@@ -454,6 +426,12 @@ onUnmounted(() => {
   
   .camera-wrapper {
     max-width: 320px;
+  }
+  
+  .scan-button {
+    min-width: 250px;
+    padding: 16px 32px;
+    font-size: 17px;
   }
 }
 </style>
