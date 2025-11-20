@@ -13,17 +13,19 @@ const lastScannedData = ref('')
 const lastFrameImage = ref('')
 const cameraReady = ref(false)
 const isScanning = ref(false)
-const autoScan = ref(false)
-const scanInterval = ref(null)
 
 const startCamera = async () => {
   try {
     stream.value = await navigator.mediaDevices.getUserMedia({
       video: { 
         facingMode: 'environment',
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 }
+        // Оптимальные настройки для сканирования QR-кодов
+        width: { ideal: 1920, max: 3840 },
+        height: { ideal: 1080, max: 2160 },
+        aspectRatio: { ideal: 1.777 }, // 16:9
+        frameRate: { ideal: 60, min: 30 }, // Высокая частота кадров
+        focusMode: 'continuous', // Непрерывная автофокусировка
+        resizeMode: 'crop-and-scale' // Оптимизация размера
       }
     })
     
@@ -39,8 +41,14 @@ const startCamera = async () => {
   }
 }
 
-const scanFrame = () => {
-  if (!cameraReady.value || !video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
+const scanNow = () => {
+  if (!cameraReady.value) {
+    errorMessage.value = 'Камера ещё не готова'
+    return
+  }
+
+  if (!video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
+    errorMessage.value = 'Видео не готово'
     return
   }
 
@@ -52,10 +60,8 @@ const scanFrame = () => {
   ctx.drawImage(video.value, 0, 0, canvas.value.width, canvas.value.height)
 
   const imageData = ctx.getImageData(0, 0, canvas.value.width, canvas.value.height)
-  
-  // Улучшенное сканирование с попыткой инверсии
-  let code = jsQR(imageData.data, imageData.width, imageData.height, {
-    inversionAttempts: 'attemptBoth'
+  const code = jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: 'dontInvert'
   })
 
   if (code) {
@@ -64,49 +70,16 @@ const scanFrame = () => {
     lastScannedData.value = code.data
     showResultModal.value = true
     errorMessage.value = ''
-    stopAutoScan() // Останавливаем автосканирование при успехе
   } else {
-    if (!autoScan.value) {
-      errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
-    }
+    errorMessage.value = 'QR-код не найден. Попробуйте ещё раз.'
   }
 
   isScanning.value = false
 }
 
-const scanNow = () => {
-  scanFrame()
-}
-
-const toggleAutoScan = () => {
-  autoScan.value = !autoScan.value
-  errorMessage.value = ''
-  
-  if (autoScan.value) {
-    startAutoScan()
-  } else {
-    stopAutoScan()
-  }
-}
-
-const startAutoScan = () => {
-  scanInterval.value = setInterval(() => {
-    if (!showResultModal.value && !isScanning.value) {
-      scanFrame()
-    }
-  }, 500) // Сканируем каждые 500ms
-}
-
-const stopAutoScan = () => {
-  if (scanInterval.value) {
-    clearInterval(scanInterval.value)
-    scanInterval.value = null
-  }
-}
-
 const drawGreenBorder = (ctx, location) => {
   ctx.strokeStyle = '#00ff00'
-  ctx.lineWidth = 4
+  ctx.lineWidth = 8
   ctx.beginPath()
   ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y)
   ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y)
@@ -120,14 +93,9 @@ const closeModal = () => {
   showResultModal.value = false
   lastScannedData.value = ''
   lastFrameImage.value = ''
-  // Возобновляем автосканирование если оно было включено
-  if (autoScan.value) {
-    startAutoScan()
-  }
 }
 
 const closeScanner = () => {
-  stopAutoScan()
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop())
   }
@@ -169,6 +137,10 @@ onUnmounted(() => {
           <div class="frame-corner bottom-left"></div>
           <div class="frame-corner bottom-right"></div>
         </div>
+        
+        <div class="scan-instruction">
+          <p>Поместите QR-код в рамку</p>
+        </div>
       </div>
 
       <!-- Индикатор загрузки -->
@@ -199,22 +171,7 @@ onUnmounted(() => {
       <span v-else>📷 Сканировать QR-код</span>
     </button>
 
-    <!-- Кнопка автосканирования -->
-    <button 
-      @click="toggleAutoScan" 
-      class="auto-scan-button"
-      :class="{ active: autoScan }"
-      :disabled="!cameraReady"
-    >
-      <span v-if="autoScan">⏹️ Остановить автосканирование</span>
-      <span v-else>🔄 Включить автосканирование</span>
-    </button>
 
-    <!-- Кнопка закрытия -->
-    <button @click="closeScanner" class="close-button">
-      <span class="button-icon">✕</span>
-      Закрыть сканер
-    </button>
 
     <!-- Модалка с результатом -->
     <QrResultModal
@@ -235,7 +192,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 24px;
   padding: 20px;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -293,7 +250,7 @@ onUnmounted(() => {
 .scan-frame {
   width: 280px;
   height: 280px;
-  border: 2px solid rgba(255, 255, 255, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 20px;
   position: relative;
 }
@@ -303,7 +260,7 @@ onUnmounted(() => {
   position: absolute;
   width: 30px;
   height: 30px;
-  border: 3px solid #00ff00;
+  border: 3px solid #667eea;
 }
 
 .frame-corner.top-left {
@@ -336,6 +293,22 @@ onUnmounted(() => {
   border-left: none;
   border-top: none;
   border-radius: 0 0 12px 0;
+}
+
+.scan-instruction {
+  margin-top: 30px;
+  text-align: center;
+  color: white;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 12px 20px;
+  border-radius: 25px;
+  backdrop-filter: blur(10px);
+}
+
+.scan-instruction p {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .placeholder {
@@ -407,44 +380,7 @@ onUnmounted(() => {
 
 .scan-button:not(:disabled):active {
   transform: scale(0.95);
-}
-
-.auto-scan-button {
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 16px 32px;
-  border-radius: 50px;
-  font-size: 17px;
-  font-weight: bold;
-  cursor: pointer;
-  min-width: 280px;
-  box-shadow: 0 10px 30px rgba(40, 167, 69, 0.4);
-  transition: all 0.2s;
-}
-
-.auto-scan-button.active {
-  background: #dc3545;
-  box-shadow: 0 10px 30px rgba(220, 53, 69, 0.4);
-}
-
-.auto-scan-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: #666;
-}
-
-.auto-scan-button:not(:disabled):hover {
-  transform: translateY(-2px);
-  box-shadow: 0 15px 35px rgba(40, 167, 69, 0.5);
-}
-
-.auto-scan-button.active:not(:disabled):hover {
-  box-shadow: 0 15px 35px rgba(220, 53, 69, 0.5);
-}
-
-.auto-scan-button:not(:disabled):active {
-  transform: scale(0.95);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
 }
 
 .close-button {
@@ -460,6 +396,7 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  backdrop-filter: blur(10px);
 }
 
 .close-button:hover {
@@ -490,8 +427,7 @@ onUnmounted(() => {
     max-width: 320px;
   }
   
-  .scan-button,
-  .auto-scan-button {
+  .scan-button {
     min-width: 250px;
     padding: 16px 32px;
     font-size: 17px;
