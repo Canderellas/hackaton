@@ -1,20 +1,147 @@
 <!-- QrCameraScanner.vue -->
+<script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
+import jsQR from 'jsqr'
+import QrResultModal from './QrResultModal.vue'
+
+const video = ref(null)
+const canvas = ref(null)
+const stream = ref(null)
+const errorMessage = ref('')
+const showResultModal = ref(false)
+const lastScannedData = ref('')
+const lastFrameImage = ref('')
+const cameraReady = ref(false)
+const isScanning = ref(false)
+const scanInterval = ref(null)
+
+const startCamera = async () => {
+  try {
+    stream.value = await navigator.mediaDevices.getUserMedia({
+      video: { 
+        facingMode: 'environment',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    })
+    
+    if (video.value) {
+      video.value.srcObject = stream.value
+      await video.value.play()
+      cameraReady.value = true
+      errorMessage.value = ''
+      startContinuousScanning()
+    }
+  } catch (err) {
+    errorMessage.value = 'Нет доступа к камере. Разрешите доступ к камере в настройках браузера.'
+    console.error('Camera error:', err)
+  }
+}
+
+const startContinuousScanning = () => {
+  // Автоматическое сканирование каждые 500ms
+  scanInterval.value = setInterval(() => {
+    if (!isScanning.value && cameraReady.value && !showResultModal.value) {
+      scanFrame()
+    }
+  }, 500)
+}
+
+const scanFrame = () => {
+  if (!cameraReady.value || !video.value || video.value.readyState !== video.value.HAVE_ENOUGH_DATA) {
+    return
+  }
+
+  isScanning.value = true
+
+  const ctx = canvas.value.getContext('2d')
+  canvas.value.width = video.value.videoWidth
+  canvas.value.height = video.value.videoHeight
+  ctx.drawImage(video.value, 0, 0, canvas.value.width, canvas.value.height)
+
+  const imageData = ctx.getImageData(0, 0, canvas.value.width, canvas.value.height)
+  const code = jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: 'dontInvert'
+  })
+
+  if (code) {
+    drawGreenBorder(ctx, code.location)
+    lastFrameImage.value = canvas.value.toDataURL('image/png')
+    lastScannedData.value = code.data
+    showResultModal.value = true
+    errorMessage.value = ''
+    // Останавливаем сканирование при успешном распознавании
+    stopContinuousScanning()
+  }
+
+  isScanning.value = false
+}
+
+const stopContinuousScanning = () => {
+  if (scanInterval.value) {
+    clearInterval(scanInterval.value)
+    scanInterval.value = null
+  }
+}
+
+const drawGreenBorder = (ctx, location) => {
+  ctx.strokeStyle = '#00ff00'
+  ctx.lineWidth = 8
+  ctx.beginPath()
+  ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y)
+  ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y)
+  ctx.lineTo(location.bottomRightCorner.x, location.bottomRightCorner.y)
+  ctx.lineTo(location.bottomLeftCorner.x, location.bottomLeftCorner.y)
+  ctx.closePath()
+  ctx.stroke()
+}
+
+const closeModal = () => {
+  showResultModal.value = false
+  lastScannedData.value = ''
+  lastFrameImage.value = ''
+  // Возобновляем сканирование после закрытия модалки
+  if (cameraReady.value) {
+    startContinuousScanning()
+  }
+}
+
+const closeScanner = () => {
+  stopContinuousScanning()
+  if (stream.value) {
+    stream.value.getTracks().forEach(track => track.stop())
+  }
+}
+
+onMounted(() => {
+  startCamera()
+})
+
+onUnmounted(() => {
+  closeScanner()
+})
+</script>
+
 <template>
-  <div class="scanner-container">
+  <div class="app">
+    <!-- Заголовок -->
     <div class="scanner-header">
       <h2>Сканирование QR-кода</h2>
       <p>Наведите камеру на QR-код устройства</p>
     </div>
 
+    <!-- Камера с областью сканирования -->
     <div class="camera-wrapper">
-      <video
-        ref="videoElement"
+      <video 
+        ref="video" 
+        playsinline 
+        muted 
         class="camera-video"
-        :style="videoStyle"
-        playsinline
+        @loadeddata="cameraReady = true"
       ></video>
+      <canvas ref="canvas" style="display: none;"></canvas>
       
-      <!-- Область сканирования QR-кода -->
+      <!-- Область сканирования -->
       <div class="scan-overlay">
         <div class="scan-frame">
           <div class="frame-corner top-left"></div>
@@ -32,177 +159,63 @@
       </div>
 
       <!-- Индикатор загрузки -->
-      <div v-if="loading" class="camera-loading">
+      <div v-if="!stream" class="placeholder">
         <div class="loading-spinner"></div>
         <p>Загрузка камеры...</p>
       </div>
-
-      <!-- Сообщение об ошибке -->
-      <div v-if="error" class="camera-error">
-        <div class="error-icon">⚠️</div>
-        <h3>Ошибка доступа к камере</h3>
-        <p>{{ error }}</p>
-        <button @click="initCamera" class="retry-button">
-          Попробовать снова
-        </button>
+      
+      <div v-else-if="!cameraReady" class="placeholder">
+        <div class="loading-spinner"></div>
+        <p>Инициализация камеры...</p>
       </div>
     </div>
 
-    <!-- Элементы управления -->
-    <div class="scanner-controls">
-      <button @click="closeScanner" class="control-button close">
-        <span class="button-icon">✕</span>
-        Закрыть
-      </button>
+    <!-- Сообщение об ошибке -->
+    <div v-if="errorMessage" class="error-message">
+      {{ errorMessage }}
     </div>
 
+    <!-- Кнопка закрытия -->
+    <button @click="closeScanner" class="close-button">
+      <span class="button-icon">✕</span>
+      Закрыть сканер
+    </button>
+
     <!-- Статус сканирования -->
-    <div v-if="scanStatus" class="scan-status" :class="scanStatus.type">
-      <span class="status-icon">{{ scanStatus.icon }}</span>
-      <span>{{ scanStatus.message }}</span>
+    <div v-if="cameraReady && !showResultModal" class="scan-status">
+      <span class="status-icon">🔍</span>
+      <span>Сканирование...</span>
     </div>
+
+    <!-- Модалка с результатом -->
+    <QrResultModal
+      v-if="showResultModal"
+      :scanned-data="lastScannedData"
+      :frame-image="lastFrameImage"
+      @close="closeModal"
+    />
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { Html5QrcodeScanner } from 'html5-qrcode'
-
-const emit = defineEmits(['scan-success', 'close'])
-
-const videoElement = ref(null)
-const loading = ref(true)
-const error = ref('')
-const scanStatus = ref(null)
-const html5QrcodeScanner = ref(null)
-
-// Стиль для видео
-const videoStyle = computed(() => ({
-  width: '100%',
-  height: '100%',
-  objectFit: 'cover'
-}))
-
-// Инициализация камеры
-const initCamera = async () => {
-  try {
-    loading.value = true
-    error.value = ''
-    
-    const cameras = await Html5Qrcode.getCameras()
-    if (cameras.length === 0) {
-      throw new Error('Камеры не найдены')
-    }
-
-    // Используем первую доступную камеру
-    const camera = cameras[0]
-
-    html5QrcodeScanner.value = new Html5QrcodeScanner(
-      'reader',
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        supportedScanTypes: [
-          Html5QrcodeScanType.SCAN_TYPE_QR_CODE
-        ]
-      },
-      false
-    )
-
-    await html5QrcodeScanner.value.start(
-      camera.id,
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 }
-      },
-      onScanSuccess,
-      onScanFailure
-    )
-
-    loading.value = false
-
-  } catch (err) {
-    console.error('Ошибка инициализации камеры:', err)
-    error.value = err.message || 'Не удалось получить доступ к камере'
-    loading.value = false
-  }
-}
-
-// Успешное сканирование
-const onScanSuccess = (decodedText, decodedResult) => {
-  scanStatus.value = {
-    type: 'success',
-    icon: '✅',
-    message: 'QR-код успешно распознан!'
-  }
-
-  // Останавливаем сканер перед эмитом
-  if (html5QrcodeScanner.value) {
-    html5QrcodeScanner.value.clear()
-  }
-
-  setTimeout(() => {
-    emit('scan-success', decodedText, decodedResult)
-  }, 500)
-}
-
-// Ошибка сканирования
-const onScanFailure = (error) => {
-  if (error && !error.includes('NotFoundException')) {
-    scanStatus.value = {
-      type: 'error',
-      icon: '❌',
-      message: 'Ошибка сканирования'
-    }
-    
-    setTimeout(() => {
-      scanStatus.value = null
-    }, 2000)
-  }
-}
-
-// Закрытие сканера
-const closeScanner = () => {
-  if (html5QrcodeScanner.value) {
-    html5QrcodeScanner.value.clear().catch(error => {
-      console.error('Ошибка при очистке сканера:', error)
-    })
-  }
-  emit('close')
-}
-
-onMounted(() => {
-  initCamera()
-})
-
-onUnmounted(() => {
-  if (html5QrcodeScanner.value) {
-    html5QrcodeScanner.value.clear().catch(error => {
-      console.error('Ошибка при очистке сканера:', error)
-    })
-  }
-})
-</script>
-
 <style scoped>
-.scanner-container {
+.app {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: #000;
   display: flex;
   flex-direction: column;
-  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 20px;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .scanner-header {
-  padding: 20px;
   text-align: center;
-  background: rgba(0, 0, 0, 0.8);
   color: white;
-  z-index: 10;
+  margin-bottom: 10px;
 }
 
 .scanner-header h2 {
@@ -218,12 +231,14 @@ onUnmounted(() => {
 }
 
 .camera-wrapper {
-  flex: 1;
   position: relative;
+  width: 90vw;
+  max-width: 400px;
+  aspect-ratio: 1 / 1;
+  border-radius: 24px;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  background: #000;
 }
 
 .camera-video {
@@ -340,24 +355,28 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* Индикатор загрузки */
-.camera-loading {
+.placeholder {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.85);
   color: white;
+  font-size: 18px;
+  text-align: center;
+  padding: 20px;
 }
 
 .loading-spinner {
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top: 4px solid #667eea;
+  border-top: 4px solid white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin: 0 auto 16px;
+  margin-bottom: 16px;
 }
 
 @keyframes spin {
@@ -365,70 +384,23 @@ onUnmounted(() => {
   100% { transform: rotate(360deg); }
 }
 
-.camera-loading p {
-  margin: 0;
-  font-size: 16px;
-}
-
-/* Сообщение об ошибке */
-.camera-error {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
+.error-message {
+  background: #ff3b30;
   color: white;
-  background: rgba(0, 0, 0, 0.8);
-  padding: 30px;
-  border-radius: 20px;
-  backdrop-filter: blur(10px);
-}
-
-.error-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.camera-error h3 {
-  margin: 0 0 12px 0;
-  font-size: 20px;
-}
-
-.camera-error p {
-  margin: 0 0 20px 0;
-  opacity: 0.8;
-}
-
-.retry-button {
-  background: #667eea;
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 12px;
-  font-size: 16px;
+  padding: 16px 32px;
+  border-radius: 30px;
+  font-size: 17px;
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+  max-width: 90vw;
+  text-align: center;
+  box-shadow: 0 8px 25px rgba(255, 59, 48, 0.3);
 }
 
-.retry-button:hover {
-  background: #5a6fd8;
-  transform: translateY(-2px);
-}
-
-/* Элементы управления */
-.scanner-controls {
-  padding: 20px;
-  display: flex;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.8);
-}
-
-.control-button {
+.close-button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 14px 28px;
   background: rgba(220, 53, 69, 0.3);
   color: white;
   border: 2px solid rgba(220, 53, 69, 0.5);
@@ -440,7 +412,7 @@ onUnmounted(() => {
   backdrop-filter: blur(10px);
 }
 
-.control-button:hover {
+.close-button:hover {
   background: rgba(220, 53, 69, 0.5);
   transform: translateY(-2px);
 }
@@ -449,30 +421,16 @@ onUnmounted(() => {
   font-size: 16px;
 }
 
-/* Статус сканирования */
 .scan-status {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 16px 24px;
-  border-radius: 12px;
-  font-weight: 600;
-  z-index: 1001;
+  color: white;
   display: flex;
   align-items: center;
   gap: 8px;
-  backdrop-filter: blur(10px);
-}
-
-.scan-status.success {
-  background: rgba(40, 167, 69, 0.9);
-  color: white;
-}
-
-.scan-status.error {
-  background: rgba(220, 53, 69, 0.9);
-  color: white;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .status-icon {
@@ -494,9 +452,8 @@ onUnmounted(() => {
     font-size: 14px;
   }
   
-  .control-button {
-    padding: 14px 28px;
-    font-size: 16px;
+  .camera-wrapper {
+    max-width: 320px;
   }
 }
 </style>
