@@ -166,11 +166,7 @@ onUnmounted(() => {
       <span v-else>📷 Сканировать QR-код</span>
     </button>
 
-    <!-- Кнопка закрытия -->
-    <button @click="closeScanner" class="close-button">
-      <span class="button-icon">✕</span>
-      Закрыть сканер
-    </button>
+
 
     <!-- Модалка с результатом -->
     <QrResultModal
